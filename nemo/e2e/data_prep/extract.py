@@ -28,7 +28,7 @@ def split_shards(wsize, dataset):
     return shards
 
 def extract_shard(shard):
-    extracted_filename = shard.replace(".zst", "")
+    extracted_filename = shard.replace(".zstd", "")
 
     # Very rare scenario where another rank has already processed a shard
     if not os.path.exists(shard):
@@ -47,10 +47,10 @@ def extract_shard(shard):
     os.remove(shard)
 
 def extract(directory=""):
-    wrank = int(os.environ.get("RANK", 0))
+    wrank = int(os.environ.get("NODE_RANK", 0))
     wsize = int(os.environ.get("WORLD_SIZE", 0))
 
-    dataset = sorted(glob(os.path.join(directory, "example_train*zst")))
+    dataset = sorted(glob(os.path.join(directory, "**/*zstd"), recursive=True))
     shards_to_extract = split_shards(wsize, dataset)
 
     for shard in shards_to_extract[wrank]:

@@ -16,32 +16,36 @@
 # limitations under the License.
 
 directory=$1
-shards_per_file=1200
-num_files=`find ${directory} -name 'example_train_chunk*.jsonl' | wc -l`
-files=(${directory}/example_train_chunk*.jsonl)
-rank=$RANK
+shards_per_file=50
+
+readarray -t files < <(find "${directory}" -name 'CC-MAIN*.jsonl' | xargs -0)
+num_files=${#files[@]}
+rank=$NODE_RANK
 world_size=$WORLD_SIZE
 
-# Find the ceiling of the result
-shards=$(((num_files+shards_per_file-1)/shards_per_file ))
+# Calculate total chunks needed
+shards=$(( (num_files + shards_per_file - 1) / shards_per_file ))
 
 echo "Creating ${shards} combined chunk(s) comprising ${shards_per_file} files each"
 
 for ((i=0; i<$shards; i++)); do
-  if (( (( $i - $rank )) % $world_size )) ; then
+  if (( (i - rank) % world_size != 0 )); then
     continue
   fi
-  file_start=$((i*shards_per_file))
 
-  if [[ $(((i+1)*shards_per_file)) -ge ${#files[@]} ]]; then
-    file_stop=$((${#files[@]}-1))
+  # Calculate start/end indices for this chunk
+  start=$((i * shards_per_file))
+  if [[ $(((i+1)*shards_per_file)) -ge num_files ]]; then
+    end=$((${#files[@]}-1))
   else
-    file_stop=$(((i+1)*shards_per_file))
+    end=$(((i+1)*shards_per_file))
   fi
 
-  echo "  Building chunk $i with files $file_start to $file_stop"
-  for file in "${files[@]:$file_start:$shards_per_file}"; do
-    cat "$file" >> "${directory}/slim_pajama_${i}.jsonl"
+  echo "Building chunk $i with files ${files[@]:start:$((end-start))}"
+
+  # Concatenate files safely and remove them afterward
+  for file in "${files[@]:start:$((end-start))}"; do
+    cat "$file" >> "${directory}/nemotron-cc_${i}.jsonl"
+    rm "$file"  # Remove immediately after processing
   done
-  rm ${files[@]:$file_start:$shards_per_file}
 done

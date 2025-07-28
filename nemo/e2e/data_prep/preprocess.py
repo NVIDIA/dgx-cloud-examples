@@ -17,44 +17,41 @@ import os
 import subprocess
 from glob import glob
 
-from huggingface_hub import hf_hub_download
+def prepare(directory=""):
+    world_size = int(os.getenv('WORLD_SIZE', 1))
+    rank = int(os.getenv('NODE_RANK', 0))
 
+    # List and sort input files
+    files = sorted(glob(os.path.join(directory, "nemotron-cc*jsonl")))
 
-def split_shards(wsize, dataset):
-    shards = []
+    # Process files assigned to this rank
+    for i, file in enumerate(files):
+        if i % world_size != rank:
+            continue
+        shard_num = i
+        output_path = os.path.join(directory, f"nemotron-cc-{shard_num}")
 
-    for shard in range(wsize):
-        idx_start = (shard * len(dataset)) // wsize
-        idx_end = ((shard + 1) * len(dataset)) // wsize
-        shards.append(dataset[idx_start:idx_end])
-    return shards
+        # Construct command (using subprocess with proper arguments)
+        command = [
+            "python3",
+            "/opt/NeMo/scripts/nlp_language_modeling/preprocess_data_for_megatron.py",
+            "--input",
+            file,
+            "--output-prefix",
+            output_path,
+            "--dataset-impl",
+            "mmap",
+            "--tokenizer-type",
+            "nvidia/Nemotron-H-8B-Base-8K",
+            "--tokenizer-library",
+            "huggingface",
+            "--workers",
+            "240"
+        ]
 
-def preprocess(directory=""):
-    wrank = int(os.environ.get("RANK", 0))
-    wsize = int(os.environ.get("WORLD_SIZE", 1))
-
-    dataset = sorted(glob(os.path.join(directory, "slim_pajama*jsonl")))
-    shards_to_extract = split_shards(wsize, dataset)
-
-    if wrank == 0:
-        # Download a specific file from a repository
-        hf_hub_download(
-            repo_id="meta-llama/Meta-Llama-3.1-8B",
-            filename="original/tokenizer.model",
-            local_dir="/nemo-workspace/tokenizers/llama-3.1-8b"
-        )
-
-    for num, shard in enumerate(shards_to_extract[wrank]):
-        shard_num = wrank + (num * wsize)  # Counter for which file is processed
-        output_path = os.path.join(directory, f"llama-slim-pajama-{shard_num}")
-        command = (
-            "python3 /opt/NeMo/scripts/nlp_language_modeling/preprocess_data_for_megatron.py "
-            f"--input {shard} "
-            f"--output-prefix {output_path} "
-            f"--dataset-impl mmap "
-            f"--tokenizer-type meta-llama/Meta-Llama-3.1-8B "
-            f"--tokenizer-library huggingface "
-            f"--tokenizer-model /nemo-workspace/tokenizers/llama-3.1-8b/original/tokenizer.model "
-            f"--workers 80"
-        )
-        subprocess.run([command], shell=True)
+        # Execute the command
+        print(f"Process {rank} is processing file {file}")
+        try:
+            subprocess.run(command, check=True)
+        except:
+            print(f"Error on file {file}")
