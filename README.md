@@ -2,8 +2,10 @@
 
 ## Lepton
 
-NVIDIA DGX Cloud Lepton is the fully managed AI platform designed for developing, training, and deploying AI models. It offers production-grade performance, 
-cost efficiency, comprehensive ML tooling, and flexible GPU options backed by enterprise SLAs.
+NVIDIA DGX Cloud Lepton is an AI platform that connects developers to global GPU compute across a network of cloud providers to drive rapid 
+innovation in the era of modern AI. It provides a unified experience across development, training, and inferencing. Developers can tap into a 
+global network of cloud providers, GPU marketplaces, and their own local environments to create a large compute environment 
+all managed through a single pane-view.
 
 Learn more about DGX Cloud Lepton here: https://docs.nvidia.com/dgx-cloud/lepton/
 
