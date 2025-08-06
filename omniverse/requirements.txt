@@ -1,0 +1,30 @@
+# DGX Cloud NVCF Material Extension - Requirements
+# Install with: pip install -r requirements.txt
+
+# Core async HTTP client for NVCF API communication
+aiohttp>=3.8.0
+
+# Image processing for computer vision analysis
+Pillow>=9.0.0
+
+# Numerical computing for material property analysis
+numpy>=1.21.0
+
+# Optional: Advanced image processing (for texture pattern recognition)
+scipy>=1.7.0
+
+# Optional: Enhanced image analysis capabilities
+scikit-image>=0.19.0
+
+# JSON handling (usually included with Python, but ensuring compatibility)
+# Note: json is part of Python standard library
+
+# Omniverse-specific dependencies
+# Note: These are typically installed with Omniverse and available in the Kit environment
+# pxr  # USD Python bindings (provided by Omniverse)
+# omni.ext  # Omniverse extension framework (provided by Omniverse)
+# omni.ui  # Omniverse UI framework (provided by Omniverse)
+# omni.usd  # Omniverse USD integration (provided by Omniverse)
+# omni.kit.commands  # Omniverse Kit commands (provided by Omniverse)
+# omni.timeline  # Omniverse timeline interface (provided by Omniverse)
+
