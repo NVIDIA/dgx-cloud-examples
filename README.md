@@ -17,6 +17,8 @@ limitations under the License.
 
 # Overview
 
+The NVIDIA DGX Cloud Examples repository is generally organized among the following three product groups:
+
 ## Lepton
 
 NVIDIA DGX Cloud Lepton is an AI platform that connects developers to global GPU compute across a network of cloud providers to drive rapid 
@@ -39,3 +41,7 @@ Learn more about NeMo Framework here: https://docs.nvidia.com/nemo-framework/use
 The NVIDIA Omniverse platform on DGX Cloud is a powerful combination that brings together advanced 3D collaboration capabilities with scalable AI 
 infrastructure. Omniverse on DGX Cloud represents the next evolution of physical and industrial AI, offering fully managed access to both 
 collaborative 3D workflows and cutting-edge AI services.
+
+# Contributing
+
+If you have an idea for a new example for DGX Cloud, please refer to our [contributor's guide](./CONTRIBUTING.md).
