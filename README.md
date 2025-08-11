@@ -17,7 +17,7 @@ limitations under the License.
 
 # Overview
 
-The NVIDIA DGX Cloud Examples repository is generally organized among the following three product groups:
+The NVIDIA DGX Cloud Examples repository is generally organized among the following product groups:
 
 ## Lepton
 
