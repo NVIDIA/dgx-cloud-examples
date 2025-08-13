@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2025 NVIDIA Corporation. All rights reserved.
+#
 # DGX Cloud NVCF Material Extension - Polished UI Version
 # Save this file and run: exec(open("path/to/this/file.py").read())
 
