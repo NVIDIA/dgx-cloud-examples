@@ -1,7 +1,7 @@
-# Sample Templates for PyTorch and MPI
+# Sample Batch Job Templates for PyTorch and MPI
 
 DGX Cloud Lepton provides the ability to use pre-generated run commands for batch jobs which employ two common
-distributed job launch frameworks frewquently used in LLM training, fine-tuning, and data preparation:
+distributed job launch frameworks frequently used in LLM training, fine-tuning, and data preparation:
 
 * Distributed PyTorch and its launch tool `torchrun`
 * MPI and its launch tool `mpirun`
