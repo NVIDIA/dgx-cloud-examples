@@ -63,8 +63,8 @@ pip install -r requirements.txt
 
 1. **Download the Extension**:
    ```bash
-   git clone https://gitlab-master.nvidia.com/dgxc-tme/dgxc-omniverse-material-gen.git
-   cd dgxc-omniverse-material-gen
+   git clone https://github.com/NVIDIA/dgx-cloud-examples.git
+   cd dgx-cloud-examples/omniverse/material_gen
    ```
 
 2. **Install Dependencies** (if not using Omniverse's built-in environment):
@@ -287,7 +287,8 @@ We welcome contributions! Please:
 
 ```bash
 # Clone the repository
-git clone https://gitlab-master.nvidia.com/dgxc-tme/dgxc-omniverse-material-gen.git
+git clone https://github.com/NVIDIA/dgx-cloud-examples.git
+cd dgx-cloud-examples/omniverse/material_gen
 
 # Load in Omniverse for testing
 exec(open("dgx_omni_ext.py").read())
