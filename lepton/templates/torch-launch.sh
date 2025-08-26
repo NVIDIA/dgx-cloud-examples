@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# start non-template code for running a NCCL test across nodes
+# start non-template code for launching a pytorch benchmark
 # assumes NGC nvcr.io/nvidia/pytorch:25.08-py3 or later
 
 WORKDIR=/workspace/ddp
