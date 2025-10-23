@@ -38,6 +38,10 @@ This section lists all of the requirements for individual notebooks.
 
 Notebooks should have a H1-level heading for the titles in the first cell (that is, Title starts with `# A Title About the Correct Use of Titles`). Logical sections within the notebook should be divided with H3-level headings (that is, `### Training Configuration`). If additional subdivisions are required, add H4 or lower level headings. All headings should be in Title Case.
 
+### Filenames
+
+Filenames for notebooks should be descriptive, such as `llama3b-lora-with-huggingface-transformer.ipynb` which describes what the notebook does. Additionally, titles should be lowercase and use hyphens (`-`) in place of spaces.
+
 ### Requirements Section
 
 Notebooks need a requirements section towards the top to indicate what is required for running the notebook. The following is a template for common requirements. Please add and complete this template in your notebook.
