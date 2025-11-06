@@ -83,7 +83,7 @@ def create_ray_job(
         env_vars: List of environment variables (default: Empty list)
         secret_vars: List of secret environment variables (default: Empty list)
         mounts: List of storage mounts (default: Empty list)
-        is_not_visible: Cluster visibility (default: False for PUBLIC)
+        is_private: Cluster visibility (default: False for PUBLIC)
         client: Lepton API client object
     """
 
