@@ -18,7 +18,6 @@ from leptonai.api.v2.client import APIClient
 from leptonai.api.v1.types.common import Metadata, LeptonVisibility
 from leptonai.api.v1.types.affinity import LeptonResourceAffinity
 from leptonai.api.v1.types.deployment import Mount, EnvVar, EnvValue
-from leptonai.api.v1.types.secret import SecretItem
 from leptonai.api.v1.types.raycluster import (
     LeptonRayCluster,
     LeptonRayClusterUserSpec,
