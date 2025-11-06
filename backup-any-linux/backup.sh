@@ -68,8 +68,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Default configuration file (can be overridden)
-#CONFIG_FILE="${CONFIG_FILE:-${SCRIPT_DIR}/scripts/backup-config.conf}"
-CONFIG_FILE="/path/to/backup-config.conf"
+CONFIG_FILE="${CONFIG_FILE:-${SCRIPT_DIR}/scripts/backup-config.conf}"
 
 
 # Default log file (can be overridden)
