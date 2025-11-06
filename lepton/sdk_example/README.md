@@ -11,7 +11,7 @@ More information on the SDK can be found in the [Lepton Documentation](https://d
 
 ## Create Ray Job
 
-[create_ray_job.py](./create_ray_job.py) uses [LeptonRayCluster](https://github.com/leptonai/leptonai/blob/main/leptonai/api/v1/types/raycluster.py) to create a new `RayCluster` in Lepton.
+[create-ray-job.py](./create-ray-job.py) uses [LeptonRayCluster](https://github.com/leptonai/leptonai/blob/main/leptonai/api/v1/types/raycluster.py) to create a new `RayCluster` in Lepton.
 
 This example can be used directly with the following arguments to create your RayCluster.
 
