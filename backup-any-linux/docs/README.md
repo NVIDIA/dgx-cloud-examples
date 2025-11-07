@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # S3 Backup System Documentation
 ## Complete Documentation Index
 
@@ -6,9 +21,46 @@
 
 This has been tested by multiple users and in a production context however, not every scenario has been possible to test. Please work with this and notify of feature requests, bugs etc so we can improve. 
 
-Upcoming features:
-   - Exclude certain file types from backup e.g. .pem
-   - Additional state files to be backed up in S3 and associated checks
+## 👀 Overview
+
+Thanks for taking an interest in Backup Any Linux!
+
+This set of scripts provides a user-driven backup solution for any Linux system, designed to backup data to S3-compatible storage. The system is ideal for automated nightly backups and prioritizes data safety with atomic operations and version history protection.
+
+### Core Concept: User-Driven Backups
+
+**Users choose what to backup** - no admin interaction required. Users simply place trigger files in their directories to opt-in to backups:
+
+- **`backupthisdir.txt`** - Backs up only files in this specific directory (no subdirectories)
+- **`backupalldirs.txt`** - Backs up all files and folders from this directory onward (recursive)
+
+### How It Works
+
+When a backup runs, the system:
+
+1. **Discovers** - Scans mount points for trigger files (`backupthisdir.txt` or `backupalldirs.txt`)
+2. **Analyzes** - Identifies new, modified, and deleted files using metadata and checksums
+3. **Backs Up** - Uploads only new or changed files to S3 (incremental backups)
+4. **Manages Versions** - Preserves deleted/modified files in a separate version history folder
+5. **Cleanup** - Automatically removes old deleted files after a configurable retention period
+
+### Key Features
+
+- **Incremental backups** - Only transfers files that have changed
+- **User-controlled** - Each user decides what to backup
+- **No data loss design** - Nothing is permanently deleted immediately; all deleted and modified files are preserved in version history for recovery
+- **Atomic operations** - State changes are performed atomically to ensure reliability and prevent corruption
+- **Version history** - Deleted and modified files are retained for recovery
+- **Configurable retention** - Control how long deleted files are kept
+- **Production-tested** - Used successfully in real-world deployments
+- **Flexible scheduling** - Run manually or via automated cron jobs
+
+For detailed setup instructions, usage examples, and advanced features, see the documentation sections below.
+
+**Upcoming features:**
+- Exclude certain file types from backup e.g. .pem
+- Additional state files to be backed up in S3 and associated checks
+
 ---
 
 ## 📚 Documentation Structure
