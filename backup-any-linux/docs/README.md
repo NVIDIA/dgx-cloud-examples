@@ -17,7 +17,7 @@
 ## Complete Documentation Index
 
 **Version:** 2.0.1 (with versions_ prefix strategy)  
-**Last Updated:** November 6, 2025  
+**Last Updated:** November 7, 2025  
 
 This has been tested by multiple users and in a production context however, not every scenario has been possible to test. Please work with this and notify of feature requests, bugs etc so we can improve. 
 
