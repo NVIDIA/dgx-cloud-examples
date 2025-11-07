@@ -192,7 +192,7 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
-        "--ray_version",
+        "--ray-version",
         type=str,
         default="2.46.0",
         help="Ray version (default: 2.46.0)"
