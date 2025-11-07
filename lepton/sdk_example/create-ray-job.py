@@ -59,7 +59,7 @@ def create_ray_job(
     head_resource_shape: str,
     worker_resource_shape: str,
     image: str ="ray:2.46.0",
-    image_version: str ="2.46.0",
+    ray_version: str ="2.46.0",
     image_pull_secret: str = "",
     worker_num_replicas: int = 1,
     env_vars: list[str] = [],
@@ -77,7 +77,7 @@ def create_ray_job(
         head_resource_shape: RayCluster head node shape eg. gpu.8xh200
         worker_resource_shape: RayCluster worker nodes shape eg. gpu.8xh200
         image: Ray image (default: ray:2.46.0)
-        image_version: Ray version (default: 2.46.0)
+        ray_version: Ray version (default: 2.46.0)
         image_pull_secret: Name of image_pull_secret if needed
         worker_num_replicas: Number of worker replicas (default: 1)
         env_vars: List of environment variables (default: Empty list)
@@ -105,7 +105,7 @@ def create_ray_job(
     for mount in mounts:
         if ":" not in mount:
             raise ValueError(f"Invalid mount format: {mount}. Use PATH:MOUNT_PATH:STORAGE_TYPE:STORAGE_NAME format.")
-        mount_list = mount.split(":")
+        mount_list = mount.split(":",3)
         if len(mount_list) != 4:
             raise ValueError(f"Invalid mount format: {mount}. Use PATH:MOUNT_PATH:STORAGE_TYPE:STORAGE_NAME format.")
         from_obj=f'{mount_list[2]}:{mount_list[3]}' ## storage system in format <storage_type>:<storage_name>
@@ -113,7 +113,7 @@ def create_ray_job(
 
     spec = LeptonRayClusterUserSpec(
         image=image,
-        ray_version=image_version,
+        ray_version=ray_version,
         image_pull_secrets=[image_pull_secret],
         head_group_spec=RayHeadGroupSpec(
             resource_shape=head_resource_shape,
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
-        "--image-version",
+        "--ray_version",
         type=str,
         default="2.46.0",
         help="Ray version (default: 2.46.0)"
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     )
     
     parser.add_argument(
-        "--is_private",
+        "--is-private",
         action="store_true",
         default=False,
         help="Make RayCluster private from other workspace users (default: False)"
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         head_resource_shape=args.head_resource_shape,
         worker_resource_shape=args.worker_resource_shape,
         image=args.image,
-        image_version=args.image_version,
+        ray_version=args.ray_version,
         image_pull_secret=args.image_pull_secret,
         worker_num_replicas=args.workers,
         mounts=args.mounts,

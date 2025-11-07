@@ -1,17 +1,17 @@
-# Workload Examples using Lepton SDK
+# Workload Examples using DGX Cloud Lepton SDK
 
-These examples showcase how to use the Lepton SDK to accomplish various tasks in Lepton. To get started, install and authenticate into the Lepton CLI with the following commands. 
+These examples showcase how to use the DGX Cloud Lepton SDK to accomplish various tasks in DGX Cloud Lepton. To get started, install and authenticate into the DGX Cloud Lepton CLI with the following commands. 
 
 ```
 pip install -U leptonai
 lep login
 ```
 
-More information on the SDK can be found in the [Lepton Documentation](https://docs.nvidia.com/dgx-cloud/lepton/reference/api/).
+More information on the SDK can be found in the [DGX Cloud Lepton Documentation](https://docs.nvidia.com/dgx-cloud/lepton/reference/api/).
 
 ## Create Ray Job
 
-[create-ray-job.py](./create-ray-job.py) uses [LeptonRayCluster](https://github.com/leptonai/leptonai/blob/main/leptonai/api/v1/types/raycluster.py) to create a new `RayCluster` in Lepton.
+[create-ray-job.py](./create-ray-job.py) uses [LeptonRayCluster](https://github.com/leptonai/leptonai/blob/main/leptonai/api/v1/types/raycluster.py) to create a new `RayCluster` in DGX Cloud Lepton.
 
 This example can be used directly with the following arguments to create your RayCluster.
 
@@ -21,13 +21,13 @@ python create-ray-job.py --name <NAME> \
 --head-resource-shape <SHAPE> \
 --worker-resource-shape <SHAPE> \
 --image <IMAGE> \
---image-version <VERSION> \
+--ray-version <VERSION> \
 --workers <NUM_WORKERS> \
 --image-pull-secret <SECRET> \
 --env <ENV_NAME>=<ENV_VALUE> \
 --secret <ENV_NAME>=<SECRET_NAME> \
 --mount <PATH:MOUNT_PATH:STORAGE_TYPE:STORAGE_NAME> \
---is_private
+--is-private
 
 ```
 
