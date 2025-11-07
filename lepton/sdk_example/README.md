@@ -33,4 +33,4 @@ python create-ray-job.py --name <NAME> \
 
 `--env` and `--secret` arguments can be added multiple times to append additional environment variables and secrets.
 
-If `--is_private` is not set, the RayCluster will default to being visible to all members of the workspace
+If `--is-private` is not set, the RayCluster will default to being visible to all members of the workspace
