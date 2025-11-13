@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from leptonai.api.v2.client import APIClient
-from ray.job_submission import JobSubmissionClient, JobStatus
+from ray.job_submission import JobSubmissionClient
 import argparse
 
 def run_ray_job(cluster_name: str, job_name: str, command: str, client: APIClient):
