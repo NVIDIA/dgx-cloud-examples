@@ -210,5 +210,5 @@ START_HERE.md
 
 ---
 
-**Start reading:** [START_HERE.md](START_HERE.md) 🚀
+**Start reading:** [START_HERE.md](../userguide/START_HERE.md) 🚀
 
