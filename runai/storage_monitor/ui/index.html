@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run.ai Storage Monitor - NVIDIA</title>
+    <script src="vendor/tailwind.js"></script>
+    <script src="js/api-client.js"></script>
+    <script src="js/storage-format.js"></script>
+    <script src="js/dropdown.js"></script>
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+    <link rel="shortcut icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="css/header.css?v=4">
+    <style>
+        :root {
+            --nvidia-green: #76b900;
+            --nvidia-green-hover: #8cd400;
+            --bg-dark: #020202;
+            --bg-card: #111111;
+            --border-subtle: #2a2a2a;
+        }
+        
+        body { 
+            background-color: var(--bg-dark); 
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+        }
+        
+        .nvidia-card { 
+            background-color: #151515; 
+            border: 1px solid var(--border-subtle); 
+            transition: all 0.3s;
+            color: #ffffff;
+        }
+        .nvidia-card:hover { border-color: rgba(118, 185, 0, 0.3); }
+        
+        .status-badge { 
+            display: inline-flex; 
+            align-items: center; 
+            padding: 4px 12px; 
+            border-radius: 4px; 
+            font-size: 0.75rem; 
+            font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em;
+            cursor: help;
+        }
+        .status-bound { background-color: rgba(118, 185, 0, 0.2); color: var(--nvidia-green); }
+        .status-pending { background-color: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .status-released { background-color: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+        .status-unused { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .status-cluster-wide { background-color: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        
+        .tooltip {
+            position: relative;
+        }
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 12px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            z-index: 1000;
+            margin-bottom: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+        }
+        
+        .btn-nvidia { 
+            background-color: var(--nvidia-green); 
+            color: var(--bg-dark); 
+            padding: 8px 16px; 
+            border-radius: 4px;
+            font-weight: 600; 
+            transition: all 0.2s; 
+            border: none; 
+            cursor: pointer; 
+        }
+        .btn-nvidia:hover { background-color: var(--nvidia-green-hover); transform: translateY(-1px); }
+        
+        .btn-secondary { 
+            background-color: transparent; 
+            color: #9ca3af; 
+            border: 1px solid var(--border-subtle); 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            transition: all 0.2s; 
+            cursor: pointer; 
+        }
+        .btn-secondary:hover { border-color: var(--nvidia-green); color: var(--nvidia-green); }
+        
+        .summary-card {
+            background-color: #151515;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .summary-card:hover { border-color: rgba(118, 185, 0, 0.3); }
+        
+        .summary-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--nvidia-green);
+        }
+        
+        .summary-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+        
+        .pvc-row {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .pvc-row:last-child { border-bottom: none; }
+        .pvc-row:hover { background-color: rgba(118, 185, 0, 0.05); }
+        
+        .loading-spinner { 
+            border: 2px solid var(--border-subtle); 
+            border-top: 2px solid var(--nvidia-green);
+            border-radius: 50%; 
+            width: 20px; 
+            height: 20px; 
+            animation: spin 1s linear infinite; 
+            display: inline-block; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        
+        .toast { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 20px; 
+            padding: 16px 24px; 
+            border-radius: 8px;
+            background-color: var(--bg-card); 
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); 
+            z-index: 1000; 
+            animation: slideIn 0.3s; 
+        }
+        @keyframes slideIn { 
+            from { transform: translateX(400px); } 
+            to { transform: translateX(0); } 
+        }
+        
+        .recommendation-card {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left: 3px solid #f59e0b;
+            padding: 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+        }
+        
+        .recommendation-card.warning {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left-color: #ef4444;
+        }
+        
+        .recommendation-card.info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left-color: #3b82f6;
+        }
+        
+        .recommendation-group {
+            margin-bottom: 16px;
+        }
+        
+        .recommendation-group-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #9ca3af;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .pvc-clickable {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .pvc-clickable:hover {
+            background-color: rgba(118, 185, 0, 0.1);
+        }
+        
+        .selector-container {
+            transition: all 0.3s;
+        }
+        .selector-container:hover {
+            border-color: rgba(118, 185, 0, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        /* Custom Dropdown Components */
+        .custom-dropdown {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .custom-dropdown-selected {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            padding: 10px 14px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .custom-dropdown-selected:hover {
+            border-color: rgba(118, 185, 0, 0.5);
+            background-color: rgba(118, 185, 0, 0.05);
+        }
+        
+        .custom-dropdown-selected svg {
+            color: var(--nvidia-green);
+            transition: transform 0.2s;
+        }
+        
+        .custom-dropdown.open .custom-dropdown-selected svg {
+            transform: rotate(180deg);
+        }
+        
+        .custom-dropdown-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: var(--bg-card);
+            border: 1px solid var(--nvidia-green);
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 1000;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+        
+        .custom-dropdown-options.open {
+            display: block;
+            animation: slideDown 0.2s;
+        }
+        
+        @keyframes slideDown {
+            from { 
+                opacity: 0; 
+                transform: translateY(-10px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0);
+            }
+        }
+        
+        .custom-dropdown-option {
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        
+        .custom-dropdown-option:first-child {
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+        
+        .custom-dropdown-option:last-child {
+            border-bottom: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+        
+        .custom-dropdown-option:hover {
+            background-color: rgba(118, 185, 0, 0.2);
+        }
+        
+        .custom-dropdown-option.selected {
+            background-color: rgba(118, 185, 0, 0.3);
+            color: var(--nvidia-green);
+            font-weight: 600;
+        }
+        
+        .custom-dropdown-options::-webkit-scrollbar { 
+            width: 8px; 
+        }
+        .custom-dropdown-options::-webkit-scrollbar-track { 
+            background: transparent;
+            margin: 6px 0;
+        }
+        .custom-dropdown-options::-webkit-scrollbar-thumb { 
+            background: var(--border-subtle); 
+            border-radius: 4px; 
+        }
+        .custom-dropdown-options::-webkit-scrollbar-thumb:hover { 
+            background: #3a3a3a; 
+        }
+        
+        .custom-dropdown-options::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            animation: fadeIn 0.2s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .modal-content {
+            background-color: var(--bg-card);
+            border: 1px solid var(--nvidia-green);
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            animation: slideUp 0.3s;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .modal-section {
+            margin-bottom: 16px;
+        }
+        
+        .modal-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--nvidia-green);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        
+        .modal-content::-webkit-scrollbar { width: 8px; }
+        .modal-content::-webkit-scrollbar-track { background: var(--bg-dark); }
+        .modal-content::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+        .modal-content::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+        
+        .log-panel { max-height: 400px; overflow-y: auto; }
+        .log-panel::-webkit-scrollbar { width: 8px; }
+        .log-panel::-webkit-scrollbar-track { background: var(--bg-dark); }
+        .log-panel::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+        .log-panel::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+        
+        .log-entry { font-family: 'Monaco', monospace; font-size: 0.75rem; padding: 8px; border-bottom: 1px solid var(--border-subtle); }
+        .log-tier { display: inline-block; width: 50px; font-weight: 600; }
+        .log-tier-API { color: #3b82f6; }
+        .log-tier-CLI { color: #8b5cf6; }
+        .log-tier-MCP { color: #ec4899; }
+        .log-tier-CORE { color: var(--nvidia-green); }
+        .log-tier-GUI { color: #f59e0b; }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="app-shell">
+            <div class="app-header">
+                <div class="app-header__left">
+                    <a href="/" class="brand-logo-wrapper" aria-label="NVIDIA">
+                        <img src="img/nvidia-logo.jpg" alt="NVIDIA logo" class="brand-logo">
+                    </a>
+                    <nav class="app-nav">
+                        <a href="/" class="active">Namespace Monitor</a>
+                        <a href="/dashboard.html">Cluster Dashboard</a>
+                    </nav>
+                </div>
+            </div>
+            <div class="page-header">
+                <h1 class="page-heading">Kubernetes Storage Visibility Tool</h1>
+                <div class="header-actions">
+                    <div class="preferences">
+                        <span class="preferences-label">Storage Units</span>
+                        <div class="custom-dropdown" id="unit-dropdown">
+                            <div class="custom-dropdown-selected">
+                                <span id="unit-selected-text">GiB (1024-based)</span>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                            <div class="custom-dropdown-options" id="unit-options">
+                                <div class="custom-dropdown-option selected" data-value="gi">GiB (1024-based)</div>
+                                <div class="custom-dropdown-option" data-value="gb">GB (1000-based)</div>
+                                <div class="custom-dropdown-option" data-value="ti">TiB (1024-based)</div>
+                                <div class="custom-dropdown-option" data-value="tb">TB (1000-based)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-actions">
+                        <button onclick="toggleLogs()" class="btn-secondary" title="View Logs (L)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </button>
+                        <button onclick="refreshAnalysis()" class="btn-secondary" title="Refresh (R)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-content">
+        
+        <!-- Logs Panel (collapsible) -->
+        <div id="logs-panel" class="nvidia-card rounded-lg mb-4 hidden">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <h3 class="font-semibold">Operation Logs (Live)</h3>
+                <button onclick="toggleLogs()" class="text-gray-400 hover:text-white">×</button>
+            </div>
+            <div id="logs-container" class="log-panel p-4 bg-black bg-opacity-50">
+                <div class="text-gray-500 text-center py-4">Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- Namespace Selector -->
+        <div class="mb-6 nvidia-card selector-container rounded-lg p-5">
+            <div>
+                <label class="block text-sm font-semibold text-gray-300 mb-3">Select Namespace:</label>
+                <div class="custom-dropdown" id="namespace-dropdown">
+                    <div class="custom-dropdown-selected">
+                        <span id="namespace-selected-text">Loading namespaces...</span>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </div>
+                    <div class="custom-dropdown-options" id="namespace-options"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div id="summary-container" class="grid grid-cols-3 gap-4 mb-6 hidden">
+            <div class="summary-card">
+                <div class="summary-value" id="total-capacity">--</div>
+                <div class="summary-label">Total Storage</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="active-pvcs">--</div>
+                <div class="summary-label">Active PVCs</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="unused-pvcs">--</div>
+                <div class="summary-label">Unused PVCs</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main id="main-content" class="hidden">
+            <!-- PVC List -->
+            <div class="nvidia-card rounded-lg p-6 mb-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">PVCs (<span id="pvc-count">0</span> total)</h2>
+                    <div class="text-xs text-gray-500">
+                        Click any PVC for details • 
+                        <span class="tooltip" data-tooltip="Storage allocated and ready">BOUND</span> + 
+                        <span class="tooltip" data-tooltip="No pods using this PVC">UNUSED</span> = cleanup candidate
+                    </div>
+                </div>
+                <div id="pvc-list-container">
+                    <div class="flex items-center justify-center p-8">
+                        <div class="loading-spinner"></div>
+                        <span class="ml-3 text-gray-400">Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div id="recommendations-container" class="nvidia-card rounded-lg p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">Recommendations</h2>
+                <div id="recommendations-list"></div>
+            </div>
+        </main>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="nvidia-card rounded-lg p-12 text-center">
+            <svg class="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+            <p class="text-gray-400">Select a namespace to view storage analysis</p>
+        </div>
+    </div>
+    
+    <!-- PVC Details Modal -->
+    <div id="pvc-modal" class="modal-overlay hidden" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="text-xl font-semibold" id="modal-title">PVC Details</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let currentNamespace = null;
+        let websocket = null;
+        let currentUnit = 'gi'; // Default to GiB
+        let analysisData = null; // Store analysis data for unit conversion
+        let logSource = null; // SSE connection for logs
+        const storageFormat = window.NvidiaStorageFormat;
+        const dropdownLib = window.NvidiaDropdown;
+        const apiClient = window.NvidiaApiClient;
+
+        // Status tooltips
+        const statusTooltips = {
+            'bound': 'K8s: Volume successfully attached to storage. Run.ai: PVC is ready for use by workloads.',
+            'pending': 'K8s: Waiting for volume provisioning. Run.ai: Storage backend is allocating the requested capacity.',
+            'released': 'K8s: PVC deleted but volume not reclaimed. Run.ai: Storage still consuming quota but not accessible.',
+            'unused': 'Run.ai: PVC exists but no pods are mounting it. May be safe to delete.'
+        };
+
+        // Load namespaces on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            initializeUnitDropdown();
+            await loadNamespaces();
+            initializeNamespaceDropdown();
+
+            // Check for namespace query parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const namespace = urlParams.get('namespace');
+            if (namespace) {
+                const match = document.querySelector(`[data-value="${namespace}"]`);
+                if (match) {
+                    selectNamespace(namespace, match);
+                }
+            }
+        });
+
+        function initializeUnitDropdown() {
+            const unitDropdown = document.getElementById('unit-dropdown');
+            dropdownLib.initCustomDropdown(unitDropdown, (value) => {
+                currentUnit = value;
+                if (analysisData) {
+                    updateSummary(analysisData.summary);
+                    updatePVCList(analysisData.pvcs);
+                    updateRecommendations(analysisData.recommendations);
+                }
+            });
+        }
+
+        function initializeNamespaceDropdown() {
+            const namespaceDropdown = document.getElementById('namespace-dropdown');
+            dropdownLib.initCustomDropdown(namespaceDropdown, (value, optionEl) => {
+                selectNamespace(value, optionEl);
+            });
+        }
+
+        async function loadNamespaces() {
+            try {
+                const data = await apiClient.fetchJson(`${API_BASE}/namespaces`);
+                
+                const namespaceOptions = document.getElementById('namespace-options');
+                namespaceOptions.innerHTML = '';
+
+                const defaultOption = document.createElement('div');
+                defaultOption.className = 'custom-dropdown-option';
+                defaultOption.dataset.value = '';
+                defaultOption.textContent = '-- Select a namespace --';
+                namespaceOptions.appendChild(defaultOption);
+                
+                data.namespaces.forEach(ns => {
+                    const option = document.createElement('div');
+                    option.className = 'custom-dropdown-option';
+                    option.dataset.value = ns;
+                    option.textContent = ns;
+                    namespaceOptions.appendChild(option);
+                });
+                
+                document.getElementById('namespace-selected-text').textContent = '-- Select a namespace --';
+                initializeNamespaceDropdown();
+            } catch (error) {
+                console.error('Failed to load namespaces:', error);
+                showToast('Failed to load namespaces', 'error');
+            }
+        }
+
+        function selectNamespace(namespace, optionElement) {
+            const namespaceOptions = document.getElementById('namespace-options');
+            const namespaceDropdown = document.getElementById('namespace-dropdown');
+            
+            // Update selected state
+            namespaceOptions.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.remove('selected'));
+            optionElement.classList.add('selected');
+            
+            // Update display
+            document.getElementById('namespace-selected-text').textContent = namespace || '-- Select a namespace --';
+            
+            // Close dropdown
+            namespaceDropdown.classList.remove('open');
+            namespaceOptions.classList.remove('open');
+            
+            // Handle namespace selection
+            if (!namespace) {
+                document.getElementById('empty-state').classList.remove('hidden');
+                document.getElementById('summary-container').classList.add('hidden');
+                document.getElementById('main-content').classList.add('hidden');
+                disconnectWebSocket();
+                return;
+            }
+            
+            currentNamespace = namespace;
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('summary-container').classList.remove('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+            
+            loadAnalysis(namespace);
+            connectWebSocket(namespace);
+        }
+
+        async function onNamespaceChange() {
+            // Legacy function - kept for compatibility
+            // New implementation uses selectNamespace()
+        }
+
+        async function loadAnalysis(namespace) {
+            try {
+                analysisData = await apiClient.fetchJson(`${API_BASE}/namespaces/${namespace}/analysis`);
+                
+                updateSummary(analysisData.summary);
+                updatePVCList(analysisData.pvcs);
+                updateRecommendations(analysisData.recommendations);
+            } catch (error) {
+                console.error('Failed to load analysis:', error);
+                showToast('Failed to load analysis', 'error');
+            }
+        }
+        
+        function onUnitChange() {
+            // Legacy function - kept for compatibility
+            // New implementation integrated into initCustomDropdowns()
+        }
+        
+        function convertCapacity(capacityGi, targetUnit) {
+            return storageFormat.convertCapacity(capacityGi, targetUnit);
+        }
+
+        function parseCapacityGi(capacity) {
+            if (capacity === undefined || capacity === null) {
+                return null;
+            }
+
+            const trimmed = `${capacity}`.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            const match = trimmed.match(/^([\d.,]+)\s*(Ki|Mi|Gi|Ti)?$/i);
+            if (!match) {
+                return null;
+            }
+
+            const numeric = parseFloat(match[1].replace(/,/g, ''));
+            if (Number.isNaN(numeric)) {
+                return null;
+            }
+
+            const unit = (match[2] || 'Gi').toLowerCase();
+            switch (unit) {
+                case 'ti':
+                    return numeric * 1024;
+                case 'mi':
+                    return numeric / 1024;
+                case 'ki':
+                    return numeric / (1024 * 1024);
+                case 'gi':
+                default:
+                    return numeric;
+            }
+        }
+
+        function updateSummary(summary) {
+            document.getElementById('total-capacity').textContent = convertCapacity(summary.total_capacity_gi, currentUnit);
+            document.getElementById('active-pvcs').textContent = summary.bound_pvcs;
+            document.getElementById('unused-pvcs').textContent = summary.unused_pvcs;
+        }
+
+        function updatePVCList(pvcs) {
+            const container = document.getElementById('pvc-list-container');
+            const countSpan = document.getElementById('pvc-count');
+            
+            countSpan.textContent = pvcs.length;
+            
+            if (pvcs.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-400 p-8">No PVCs found in this namespace</div>';
+                return;
+            }
+            
+            container.innerHTML = pvcs.map(pvcWithPods => createPVCCard(pvcWithPods)).join('');
+        }
+
+        function createPVCCard(pvcWithPods) {
+            const pvc = pvcWithPods.pvc;
+            const pods = pvcWithPods.pods || [];
+            const statusClass = `status-${pvc.status.toLowerCase()}`;
+            const statusTooltip = statusTooltips[pvc.status.toLowerCase()] || '';
+            
+            // Check if PVC is cluster-wide
+            const isClusterWide = pvc.labels && pvc.labels['run.ai/cluster-wide'] === 'true';
+            const clusterWideBadge = isClusterWide ? 
+                '<span class="status-badge status-cluster-wide tooltip" data-tooltip="This PVC is replicated across multiple namespaces, consuming quota in each">cluster-wide</span>' : '';
+            
+            const unusedBadge = pvcWithPods.is_unused ? 
+                '<span class="status-badge status-unused tooltip ml-2" data-tooltip="' + statusTooltips.unused + '">unused</span>' : '';
+            
+            // Parse capacity for display
+            const capacityGi = parseCapacityGi(pvc.capacity);
+            const displayCapacity = convertCapacity(capacityGi ?? 0, currentUnit);
+            
+            return `
+                <div class="pvc-row pvc-clickable" onclick="showPVCDetails('${pvc.name}')">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-lg font-semibold">${pvc.name}</h3>
+                                <span class="status-badge ${statusClass} tooltip" data-tooltip="${statusTooltip}">${pvc.status}</span>
+                                ${unusedBadge}
+                                ${clusterWideBadge}
+                            </div>
+                            <div class="text-sm text-gray-400 mt-2">
+                                Capacity: ${displayCapacity} • 
+                                Storage Class: ${pvc.storage_class || 'default'} • 
+                                Pods: ${pods.length} • 
+                                Age: ${pvc.age_days || '?'}d
+                            </div>
+                        </div>
+                        ${pods.length > 0 ? `
+                        <button onclick="event.stopPropagation(); togglePods('${pvc.name}')" class="btn-secondary p-2">
+                            <svg class="w-5 h-5 transition-transform" id="expand-icon-${pvc.name}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        ` : ''}
+                    </div>
+                    ${pods.length > 0 ? `
+                    <div id="pods-${pvc.name}" class="hidden mt-4 pt-4 border-t border-gray-800">
+                        <h4 class="text-sm font-semibold mb-2 text-gray-300">Pods Using This PVC:</h4>
+                        <div class="space-y-1">
+                            ${pods.map(pod => `
+                                <div class="text-sm text-gray-400">
+                                    • ${pod.name} <span class="text-gray-600">(${pod.status})</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        async function showPVCDetails(pvcName) {
+            // Find the PVC in our data
+            if (!analysisData) return;
+            
+            const pvcData = analysisData.pvcs.find(p => p.pvc.name === pvcName);
+            if (!pvcData) return;
+            
+            const pvc = pvcData.pvc;
+            const pods = pvcData.pods || [];
+            const capacityGi = parseCapacityGi(pvc.capacity) ?? 0;
+            
+            // Set modal title
+            document.getElementById('modal-title').textContent = pvc.name;
+            
+            // Build modal content
+            let html = '';
+            
+            // Basic Info Section
+            html += `<div class="modal-section">
+                <div class="modal-section-title">Basic Information</div>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div><span class="text-gray-400">Namespace:</span> <span class="text-white">${pvc.namespace}</span></div>
+                    <div><span class="text-gray-400">Age:</span> <span class="text-white">${pvc.age_days || '?'} days</span></div>
+                    <div><span class="text-gray-400">Capacity:</span> <span class="text-white">${convertCapacity(capacityGi, currentUnit)}</span></div>
+                    <div><span class="text-gray-400">Storage Class:</span> <span class="text-white">${pvc.storage_class || 'default'}</span></div>
+                </div>
+            </div>`;
+            
+            // Status Section
+            const statusExplain = pvc.status === 'Bound' ? 'Storage allocated and ready' :
+                                 pvc.status === 'Pending' ? 'Waiting for volume provisioning' :
+                                 'Volume not attached';
+            const usageStatus = pods.length > 0 ? 
+                '<span class="text-green-400">IN USE</span>' : 
+                '<span class="text-red-400">UNUSED</span>';
+            const usageExplain = pods.length > 0 ? 
+                `${pods.length} pod(s) mounting this PVC` : 
+                'No pods mounting this PVC';
+            
+            html += `<div class="modal-section">
+                <div class="modal-section-title">Status</div>
+                <div class="space-y-2 text-sm">
+                    <div><span class="text-gray-400">K8s Status:</span> <span class="text-white">${pvc.status}</span> <span class="text-gray-500">(${statusExplain})</span></div>
+                    <div><span class="text-gray-400">Usage Status:</span> ${usageStatus} <span class="text-gray-500">(${usageExplain})</span></div>
+                    <div><span class="text-gray-400">Volume:</span> <span class="text-white font-mono text-xs">${pvc.volume_name || 'N/A'}</span></div>
+                </div>
+            </div>`;
+            
+            // Check if cluster-wide and find replicas
+            const isClusterWide = pvc.labels && pvc.labels['run.ai/cluster-wide'] === 'true';
+            if (isClusterWide) {
+                html += `<div class="modal-section">
+                    <div class="modal-section-title">⚠️ Cluster-Wide PVC</div>
+                    <div class="text-sm text-amber-400 mb-3">
+                        This PVC is replicated across multiple namespaces. Each replica consumes quota independently.
+                    </div>
+                    <div id="replica-scan" class="text-sm text-gray-400">
+                        <div class="loading-spinner inline-block mr-2"></div> Scanning for replicas...
+                    </div>
+                </div>`;
+                
+                // Scan for replicas asynchronously
+                setTimeout(async () => {
+                    try {
+                        const allNamespaces = await apiClient.fetchJson(`${API_BASE}/namespaces`);
+                        let replicaNamespaces = [];
+                        
+                        for (const ns of allNamespaces.namespaces) {
+                            try {
+                                const nsData = await apiClient.fetchJson(`${API_BASE}/namespaces/${ns}/pvcs`);
+                                const replica = nsData.pvcs.find(p => p.pvc.name === pvcName);
+                                if (replica) {
+                                    replicaNamespaces.push(ns);
+                                }
+                            } catch (e) {
+                                // Skip inaccessible namespaces
+                            }
+                        }
+                        
+                        const replicaScanDiv = document.getElementById('replica-scan');
+                        if (replicaScanDiv) {
+                            if (replicaNamespaces.length > 1) {
+                                let replicaHtml = `<div class="font-semibold text-white mb-2">Found in ${replicaNamespaces.length} namespaces:</div>`;
+                                replicaHtml += '<div class="space-y-1">';
+                                replicaNamespaces.forEach(ns => {
+                                    replicaHtml += `<div class="text-gray-300">• ${ns}</div>`;
+                                });
+                                replicaHtml += '</div>';
+                                replicaHtml += `<div class="mt-3 text-amber-400 font-semibold">Total Consumption: ${convertCapacity((capacityGi ?? 0) * replicaNamespaces.length, currentUnit)}</div>`;
+                                replicaScanDiv.innerHTML = replicaHtml;
+                            } else {
+                                replicaScanDiv.innerHTML = '<div class="text-gray-400">Only found in current namespace</div>';
+                            }
+                        }
+                    } catch (e) {
+                        const replicaScanDiv = document.getElementById('replica-scan');
+                        if (replicaScanDiv) {
+                            replicaScanDiv.innerHTML = '<div class="text-gray-500">Unable to scan all namespaces</div>';
+                        }
+                    }
+                }, 100);
+            }
+            
+            // Pod Usage Section
+            if (pods.length > 0) {
+                html += `<div class="modal-section">
+                    <div class="modal-section-title">Pods (${pods.length})</div>
+                    <div class="space-y-2">`;
+                pods.forEach(pod => {
+                    const podStatusColor = pod.status === 'Running' ? 'text-green-400' :
+                                          pod.status === 'Succeeded' ? 'text-blue-400' :
+                                          pod.status === 'Failed' ? 'text-red-400' : 'text-gray-400';
+                    html += `<div class="text-sm">
+                        <span class="text-white">${pod.name}</span>
+                        <span class="${podStatusColor} ml-2">(${pod.status})</span>
+                    </div>`;
+                });
+                html += `</div></div>`;
+            } else {
+                html += `<div class="modal-section">
+                    <div class="modal-section-title">⚠️ Cleanup Candidate</div>
+                    <div class="text-sm text-amber-400">
+                        This PVC is allocated but not in use. Consider deleting to reclaim storage and free quota.
+                    </div>
+                </div>`;
+            }
+            
+            // Inject content and show modal
+            document.getElementById('modal-body').innerHTML = html;
+            document.getElementById('pvc-modal').classList.remove('hidden');
+        }
+        
+        function closeModal() {
+            document.getElementById('pvc-modal').classList.add('hidden');
+        }
+
+        function togglePods(pvcName) {
+            const podsDiv = document.getElementById(`pods-${pvcName}`);
+            const icon = document.getElementById(`expand-icon-${pvcName}`);
+            
+            if (podsDiv.classList.contains('hidden')) {
+                podsDiv.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                podsDiv.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendations-container');
+            const listDiv = document.getElementById('recommendations-list');
+            
+            if (!recommendations || recommendations.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            
+            container.classList.remove('hidden');
+            
+            // Group recommendations by type
+            const groups = {
+                unused_pvc: { title: 'Unused PVCs', recs: [], priority: 1 },
+                old_unused_pvc: { title: 'Old Unused PVCs (30+ Days)', recs: [], priority: 2 },
+                unused_storage_summary: { title: 'Storage Savings Opportunity', recs: [], priority: 3 },
+                pending_pvc: { title: 'Provisioning Issues', recs: [], priority: 4 }
+            };
+            
+            // Sort recommendations into groups
+            recommendations.forEach(rec => {
+                const group = groups[rec.type];
+                if (group) {
+                    group.recs.push(rec);
+                }
+            });
+            
+            // Render grouped recommendations
+            let html = '';
+            Object.values(groups)
+                .filter(group => group.recs.length > 0)
+                .sort((a, b) => a.priority - b.priority)
+                .forEach(group => {
+                    html += `<div class="recommendation-group">`;
+                    html += `<div class="recommendation-group-title">${group.title}</div>`;
+                    
+                    group.recs.forEach(rec => {
+                        const severityClass = rec.severity;
+                        const icon = rec.severity === 'warning' ? '⚠️' : rec.severity === 'error' ? '❌' : 'ℹ️';
+
+                        // Clean up description to avoid repeating PVC name
+                        let cleanDesc = rec.description || '';
+                        if (rec.pvc_name && cleanDesc.startsWith(`PVC ${rec.pvc_name}`)) {
+                            cleanDesc = cleanDesc.replace(`PVC ${rec.pvc_name} `, '');
+                            cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+                        }
+
+                        const isUnknownCapacity = rec.capacity === 'Unknown' || (rec.capacity || '').trim().toLowerCase() === 'unknown';
+                        const capacityGiField = typeof rec.capacity_gi === 'number' ? rec.capacity_gi : null;
+                        const parsedCapacityGi = capacityGiField !== null ? capacityGiField : parseCapacityGi(rec.capacity || '');
+                        const hasCapacity = !isUnknownCapacity && typeof parsedCapacityGi === 'number' && !Number.isNaN(parsedCapacityGi) && parsedCapacityGi > 0;
+                        const formattedCapacity = hasCapacity ? convertCapacity(parsedCapacityGi, currentUnit) : null;
+
+                        let title = rec.title || '';
+                        let description = cleanDesc;
+
+                        if (formattedCapacity) {
+                            if (rec.type === 'unused_storage_summary') {
+                                title = `${formattedCapacity} Available for Reclamation`;
+                            } else if (rec.type === 'unused_pvc') {
+                                if (description.includes('(')) {
+                                    description = description.replace(/\([^()]*\)/, `(${formattedCapacity})`);
+                                } else if (description.length > 0) {
+                                    description = `${formattedCapacity} — ${description}`;
+                                } else {
+                                    description = formattedCapacity;
+                                }
+                            }
+                        }
+
+                        html += `
+                            <div class="recommendation-card ${severityClass}">
+                                <div class="flex items-start gap-3">
+                                    <span class="text-xl">${icon}</span>
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-white">${title}</h4>
+                                        <p class="text-sm text-gray-300 mt-1">${description}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += `</div>`;
+                });
+            
+            listDiv.innerHTML = html;
+        }
+
+        function connectWebSocket(namespace) {
+            disconnectWebSocket();
+            
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/namespaces/${namespace}`;
+            
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') {
+                    updateSummary(data.summary);
+                    updatePVCList(data.pvcs);
+                }
+            };
+            
+            websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            websocket.onclose = () => {
+                // Reconnect after 5 seconds if namespace still selected
+                if (currentNamespace === namespace) {
+                    setTimeout(() => connectWebSocket(namespace), 5000);
+                }
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+        }
+
+        async function refreshAnalysis() {
+            if (currentNamespace) {
+                await loadAnalysis(currentNamespace);
+                showToast('Analysis refreshed', 'success');
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            
+            const color = type === 'success' ? 'var(--nvidia-green)' : 
+                         type === 'error' ? '#ef4444' : '#9ca3af';
+            
+            toast.innerHTML = `
+                <div style="border-left: 3px solid ${color}; padding-left: 12px;">
+                    <div class="font-semibold" style="color: ${color};">${type.toUpperCase()}</div>
+                    <div class="text-sm text-gray-300 mt-1">${message}</div>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(400px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function toggleLogs() {
+            const panel = document.getElementById('logs-panel');
+            const isHidden = panel.classList.contains('hidden');
+            
+            if (isHidden) {
+                panel.classList.remove('hidden');
+                startLogStream();
+            } else {
+                panel.classList.add('hidden');
+                stopLogStream();
+            }
+        }
+
+        function startLogStream() {
+            if (logSource) return;
+            
+            logSource = new EventSource(`${API_BASE}/logs/stream`);
+            
+            logSource.onmessage = (event) => {
+                const log = JSON.parse(event.data);
+                appendLog(log);
+            };
+            
+            logSource.onerror = () => {
+                console.error('Log stream error');
+                stopLogStream();
+            };
+            
+            // Load initial logs
+            loadRecentLogs();
+        }
+
+        function stopLogStream() {
+            if (logSource) {
+                logSource.close();
+                logSource = null;
+            }
+        }
+
+        async function loadRecentLogs() {
+            try {
+                const data = await apiClient.fetchJson(`${API_BASE}/logs?count=50`);
+                
+                const container = document.getElementById('logs-container');
+                container.innerHTML = '';
+                
+                data.logs.forEach(log => appendLog(log));
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+            }
+        }
+
+        function appendLog(log) {
+            const container = document.getElementById('logs-container');
+            if (!container) return;
+            
+            const time = new Date(log.timestamp).toLocaleTimeString();
+            const statusColor = log.status === 'success' ? 'text-green-400' : 
+                               log.status === 'error' ? 'text-red-400' : 
+                               'text-gray-400';
+            
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `
+                <span class="text-gray-500">${time}</span>
+                <span class="log-tier log-tier-${log.tier}">[${log.tier}]</span>
+                <span class="${statusColor}">${log.operation}</span>
+                ${log.error ? `<span class="text-red-400 ml-2">Error: ${log.error}</span>` : ''}
+            `;
+            
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+            
+            // Keep only last 100 entries
+            while (container.children.length > 100) {
+                container.removeChild(container.firstChild);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'SELECT') return;
+            if (e.key === 'Escape') closeModal();
+            if (e.key === 'l' || e.key === 'L') toggleLogs();
+            if (e.key === 'r' || e.key === 'R') refreshAnalysis();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            disconnectWebSocket();
+            stopLogStream();
+        });
+    </script>
+</body>
+</html>
+

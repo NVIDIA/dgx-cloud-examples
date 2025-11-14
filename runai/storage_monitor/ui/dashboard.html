@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run.ai Storage Dashboard - NVIDIA</title>
+    <link rel="icon" type="image/x-icon" href="/img/favicon.ico">
+    <link rel="shortcut icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="css/header.css?v=4">
+    <script src="vendor/tailwind.js"></script>
+    <script src="vendor/chart.min.js"></script>
+    <script src="js/api-client.js"></script>
+    <script src="js/storage-format.js"></script>
+    <script src="js/dropdown.js"></script>
+    <style>
+        :root {
+            --nvidia-green: #76b900;
+            --nvidia-green-hover: #8cd400;
+            --bg-dark: #020202;
+            --bg-card: #111111;
+            --border-subtle: #2a2a2a;
+        }
+        
+        body { 
+            background-color: var(--bg-dark); 
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+        }
+        
+        .nvidia-card { 
+            background-color: #151515; 
+            border: 1px solid var(--border-subtle); 
+            transition: all 0.3s;
+            color: #ffffff;
+        }
+        .nvidia-card:hover { border-color: rgba(118, 185, 0, 0.3); }
+        
+        .overview-card {
+            background-color: #151515;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .overview-card:hover { border-color: rgba(118, 185, 0, 0.3); }
+        
+        .overview-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--nvidia-green);
+            margin: 10px 0;
+        }
+        
+        .overview-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .overview-percentage {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-top: 6px;
+        }
+        
+        .btn-nvidia { 
+            background-color: var(--nvidia-green); 
+            color: var(--bg-dark); 
+            padding: 8px 16px; 
+            border-radius: 4px;
+            font-weight: 600; 
+            transition: all 0.2s; 
+            border: none; 
+            cursor: pointer; 
+        }
+        .btn-nvidia:hover { background-color: var(--nvidia-green-hover); }
+        
+        .btn-secondary { 
+            background-color: transparent; 
+            color: #9ca3af; 
+            border: 1px solid var(--border-subtle); 
+            padding: 8px 16px; 
+            border-radius: 4px; 
+            transition: all 0.2s; 
+            cursor: pointer; 
+        }
+        .btn-secondary:hover { border-color: var(--nvidia-green); color: var(--nvidia-green); }
+        
+        .graph-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .graph-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #ffffff;
+        }
+        
+        .checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 20px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            color: #9ca3af;
+            transition: color 0.2s;
+        }
+        .checkbox-label:hover { color: var(--nvidia-green); }
+        .checkbox-label input { margin-right: 8px; }
+        
+        .namespace-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .namespace-table th {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid var(--border-subtle);
+            color: #9ca3af;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        .namespace-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .namespace-table tr:hover {
+            background-color: rgba(118, 185, 0, 0.05);
+            cursor: pointer;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+        
+        .error-text {
+            color: #ef4444;
+        }
+        
+        .success-text {
+            color: var(--nvidia-green);
+        }
+        
+        .log-panel { 
+            max-height: 400px; 
+            overflow-y: auto; 
+            background: rgba(0, 0, 0, 0.5); 
+        }
+        .log-panel::-webkit-scrollbar { width: 8px; }
+        .log-panel::-webkit-scrollbar-track { background: #1a1a1a; }
+        .log-panel::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+        .log-panel::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+        
+        .log-entry { 
+            font-family: 'Monaco', monospace; 
+            font-size: 0.75rem; 
+            padding: 8px; 
+            border-bottom: 1px solid var(--border-subtle); 
+        }
+        .log-tier { display: inline-block; width: 50px; font-weight: 600; }
+        .log-tier-API { color: #3b82f6; }
+        .log-tier-CLI { color: #8b5cf6; }
+        .log-tier-MCP { color: #ec4899; }
+        .log-tier-CORE { color: var(--nvidia-green); }
+        .log-tier-GUI { color: #f59e0b; }
+        
+        .custom-dropdown {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .custom-dropdown-selected {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            padding: 10px 14px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+        
+        .custom-dropdown-selected:hover {
+            border-color: rgba(118, 185, 0, 0.5);
+            background-color: rgba(118, 185, 0, 0.05);
+        }
+        
+        .custom-dropdown-selected svg {
+            color: var(--nvidia-green);
+            transition: transform 0.2s;
+        }
+        
+        .custom-dropdown.open .custom-dropdown-selected svg {
+            transform: rotate(180deg);
+        }
+        
+        .custom-dropdown-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: var(--bg-card);
+            border: 1px solid var(--nvidia-green);
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 1000;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+        
+        .custom-dropdown-options.open {
+            display: block;
+            animation: slideDown 0.2s;
+        }
+        
+        .custom-dropdown-option {
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        
+        .custom-dropdown-option:first-child {
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+        
+        .custom-dropdown-option:last-child {
+            border-bottom: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+        
+        .custom-dropdown-option:hover {
+            background-color: rgba(118, 185, 0, 0.2);
+        }
+        
+        .custom-dropdown-option.selected {
+            background-color: rgba(118, 185, 0, 0.3);
+            color: var(--nvidia-green);
+            font-weight: 600;
+        }
+        
+        .custom-dropdown-options::-webkit-scrollbar { 
+            width: 8px; 
+        }
+        .custom-dropdown-options::-webkit-scrollbar-track { 
+            background: transparent;
+            margin: 6px 0;
+        }
+        .custom-dropdown-options::-webkit-scrollbar-thumb { 
+            background: var(--border-subtle); 
+            border-radius: 4px; 
+        }
+        .custom-dropdown-options::-webkit-scrollbar-thumb:hover { 
+            background: #3a3a3a; 
+        }
+        
+        .custom-dropdown-options::-webkit-scrollbar-corner {
+            background: transparent;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="app-shell">
+            <div class="app-header">
+                <div class="app-header__left">
+                    <a href="/" class="brand-logo-wrapper" aria-label="NVIDIA">
+                        <img src="img/nvidia-logo.jpg" alt="NVIDIA logo" class="brand-logo">
+                    </a>
+                    <nav class="app-nav">
+                        <a href="/">Namespace Monitor</a>
+                        <a href="/dashboard.html" class="active">Cluster Dashboard</a>
+                    </nav>
+                </div>
+            </div>
+            <div class="page-header">
+                <h1 class="page-heading">Multi-Namespace Storage Overview</h1>
+                <div class="header-actions">
+                    <div class="preferences">
+                        <span class="preferences-label">Storage Units</span>
+                        <div class="custom-dropdown" id="unit-dropdown">
+                            <div class="custom-dropdown-selected">
+                                <span id="unit-selected-text">GiB (1024-based)</span>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                            <div class="custom-dropdown-options" id="unit-options">
+                                <div class="custom-dropdown-option selected" data-value="gi">GiB (1024-based)</div>
+                                <div class="custom-dropdown-option" data-value="gb">GB (1000-based)</div>
+                                <div class="custom-dropdown-option" data-value="ti">TiB (1024-based)</div>
+                                <div class="custom-dropdown-option" data-value="tb">TB (1000-based)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-actions">
+                        <button onclick="toggleLogs()" class="btn-secondary" title="View Logs (L)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </button>
+                        <button onclick="loadDashboard()" class="btn-secondary" title="Refresh (R)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="page-content">
+        
+        <!-- Logs Panel (collapsible) -->
+        <div id="logs-panel" class="nvidia-card rounded-lg mb-4 hidden">
+            <div class="p-4 border-b border-gray-800 flex justify-between items-center">
+                <h3 class="font-semibold">Operation Logs (Live)</h3>
+                <button onclick="toggleLogs()" class="text-gray-400 hover:text-white">×</button>
+            </div>
+            <div id="logs-container" class="log-panel p-4">
+                <div class="text-gray-500 text-center py-4">Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- Cluster Overview Cards -->
+        <div id="overview-section" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="overview-card">
+                <div class="overview-label">Total Capacity</div>
+                <div class="overview-value" id="total-capacity">-</div>
+            </div>
+            <div class="overview-card">
+                <div class="overview-label">Unused Capacity</div>
+                <div class="overview-value error-text" id="unused-capacity">-</div>
+                <div class="overview-percentage" id="unused-percentage">-</div>
+            </div>
+            <div class="overview-card">
+                <div class="overview-label">Total Namespaces</div>
+                <div class="overview-value" id="total-namespaces">-</div>
+            </div>
+            <div class="overview-card">
+                <div class="overview-label">Total PVCs</div>
+                <div class="overview-value" id="total-pvcs">-</div>
+            </div>
+        </div>
+
+        <!-- Graph Configuration Panel -->
+        <div class="nvidia-card rounded-lg p-6 mb-8">
+            <h3 class="text-lg font-semibold mb-4">Graph Configuration</h3>
+            <div id="graph-config" class="flex flex-wrap gap-4">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- Graphs Grid -->
+        <div id="graphs-container" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Graphs dynamically added here -->
+        </div>
+
+        <!-- Namespace Table -->
+        <div class="nvidia-card rounded-lg p-6">
+            <h3 class="text-lg font-semibold mb-4">Namespaces</h3>
+            <div style="overflow-x: auto;">
+                <table class="namespace-table">
+                    <thead>
+                        <tr>
+                            <th>Namespace</th>
+                            <th>Total PVCs</th>
+                            <th>Unused PVCs</th>
+                            <th>Total Capacity</th>
+                            <th>Unused Capacity</th>
+                        </tr>
+                    </thead>
+                    <tbody id="namespace-table-body">
+                        <tr><td colspan="6" class="loading">Loading namespaces...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'runai-dashboard-graph-config';
+        let charts = {};
+        let availableGraphs = [];
+        let graphConfigInitialized = false;
+        let currentGraphsRefreshToken = null;
+        let overviewData = null;
+        let namespacesData = [];
+        let currentUnit = 'gi';
+
+        const storageFormat = window.NvidiaStorageFormat;
+        const dropdownLib = window.NvidiaDropdown;
+        const apiClient = window.NvidiaApiClient;
+        const unitConfig = storageFormat.unitConfig;
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function convertStorage(gi) {
+            return storageFormat.convertStorage(gi, currentUnit);
+        }
+
+        function getSavedGraphConfig() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                return saved ? JSON.parse(saved) : null;
+            } catch (error) {
+                console.warn('Failed to parse saved graph config', error);
+                return null;
+            }
+        }
+
+        function saveGraphConfig(enabledGraphIds) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(enabledGraphIds));
+            } catch (error) {
+                console.warn('Failed to persist graph config', error);
+            }
+        }
+
+        function getEnabledGraphIds() {
+            const checkboxes = document.querySelectorAll('#graph-config input[type="checkbox"]');
+            if (!checkboxes.length) {
+                return [];
+            }
+
+            return Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.dataset.graphId);
+        }
+
+        function resolveInitialEnabledGraphs(configs, previousGraphIds = new Set()) {
+            const saved = getSavedGraphConfig();
+
+            if (Array.isArray(saved)) {
+                const savedSet = new Set(saved);
+                const enabled = configs
+                    .filter(graph => savedSet.has(graph.id))
+                    .map(graph => graph.id);
+
+                configs.forEach(graph => {
+                    const isNewGraph = !previousGraphIds.has(graph.id);
+                    if (isNewGraph && graph.default_enabled && !savedSet.has(graph.id)) {
+                        enabled.push(graph.id);
+                    }
+                });
+
+                return Array.from(new Set(enabled));
+            }
+
+            return configs
+                .filter(graph => graph.default_enabled)
+                .map(graph => graph.id);
+        }
+
+        async function ensureGraphConfig(forceReload = false) {
+            if (!forceReload && graphConfigInitialized) {
+                return;
+            }
+
+            try {
+                if (!forceReload && availableGraphs.length > 0) {
+                    graphConfigInitialized = true;
+                    return;
+                }
+
+                const previousGraphIds = new Set(availableGraphs.map(graph => graph.id));
+                const configs = await apiClient.fetchJson('/dashboard/config/graphs');
+                availableGraphs = configs;
+                const enabledGraphs = resolveInitialEnabledGraphs(configs, previousGraphIds);
+                renderGraphConfig(enabledGraphs);
+            } catch (error) {
+                console.error('Failed to load graph configs:', error);
+            }
+        }
+
+        async function loadDashboard() {
+            await ensureGraphConfig();
+            const enabledGraphs = graphConfigInitialized ? getEnabledGraphIds() : [];
+            await Promise.all([
+                loadOverview(),
+                loadNamespaces(),
+                refreshGraphs(enabledGraphs)
+            ]);
+        }
+
+        async function loadOverview() {
+            try {
+                overviewData = await apiClient.fetchJson('/dashboard/overview');
+                updateOverviewDisplay();
+            } catch (error) {
+                console.error('Failed to load overview:', error);
+            }
+        }
+
+        function updateOverviewDisplay() {
+            if (!overviewData) return;
+            document.getElementById('total-namespaces').textContent = overviewData.total_namespaces;
+            document.getElementById('total-pvcs').textContent = overviewData.total_pvcs;
+
+            const totalCapacityGi = overviewData.total_capacity_gi;
+            const unusedCapacityGi = overviewData.unused_capacity_gi;
+
+            document.getElementById('total-capacity').textContent = convertStorage(totalCapacityGi);
+            document.getElementById('unused-capacity').textContent = convertStorage(unusedCapacityGi);
+
+            const percentageEl = document.getElementById('unused-percentage');
+            if (percentageEl) {
+                const percentageValue = totalCapacityGi > 0 ? (unusedCapacityGi / totalCapacityGi) * 100 : 0;
+                percentageEl.textContent = `${percentageValue.toFixed(1)}% Unused`;
+            }
+        }
+
+        function renderGraphConfig(enabledGraphs) {
+            const container = document.getElementById('graph-config');
+            container.innerHTML = availableGraphs.map(graph => `
+                <label class="checkbox-label">
+                    <input type="checkbox" 
+                           data-graph-id="${graph.id}" 
+                           ${enabledGraphs.includes(graph.id) ? 'checked' : ''}
+                           onchange="onGraphConfigChange()">
+                    <span>${graph.name}</span>
+                </label>
+            `).join('');
+            graphConfigInitialized = true;
+            saveGraphConfig(enabledGraphs);
+        }
+
+        async function onGraphConfigChange() {
+            const enabled = getEnabledGraphIds();
+            saveGraphConfig(enabled);
+            await refreshGraphs(enabled);
+        }
+
+        function removeGraph(graphId) {
+            if (charts[graphId]) {
+                charts[graphId].destroy();
+                delete charts[graphId];
+            }
+            const graphDiv = document.getElementById(`graph-${graphId}`);
+            if (graphDiv) {
+                graphDiv.remove();
+            }
+        }
+
+        function ensureGraphElements(graph) {
+            const container = document.getElementById('graphs-container');
+            let graphDiv = document.getElementById(`graph-${graph.id}`);
+
+            if (!graphDiv) {
+                graphDiv = document.createElement('div');
+                graphDiv.className = 'graph-container';
+                graphDiv.id = `graph-${graph.id}`;
+                graphDiv.innerHTML = `
+                    <div class="graph-title">${graph.name}</div>
+                    <div class="graph-body">
+                        <div class="loading graph-loading">Loading...</div>
+                        <div class="graph-error error-text hidden"></div>
+                        <canvas id="chart-${graph.id}" class="hidden"></canvas>
+                    </div>
+                `;
+                container.appendChild(graphDiv);
+            } else {
+                const titleEl = graphDiv.querySelector('.graph-title');
+                if (titleEl) {
+                    titleEl.textContent = graph.name;
+                }
+            }
+
+            const loadingEl = graphDiv.querySelector('.graph-loading');
+            const errorEl = graphDiv.querySelector('.graph-error');
+            const canvas = graphDiv.querySelector('canvas');
+
+            if (loadingEl) {
+                loadingEl.classList.remove('hidden');
+                loadingEl.textContent = 'Loading...';
+            }
+
+            if (errorEl) {
+                errorEl.classList.add('hidden');
+                errorEl.textContent = '';
+            }
+
+            if (canvas) {
+                canvas.classList.add('hidden');
+            }
+
+            return { canvas, loadingEl, errorEl };
+        }
+
+        function buildChartOptions(data) {
+            const baseOptions = data.options || {};
+            const basePlugins = baseOptions.plugins || {};
+            const baseLegend = basePlugins.legend || {};
+            const baseLegendLabels = baseLegend.labels || {};
+
+            let scales;
+            if (baseOptions.scales) {
+                scales = {};
+                if (baseOptions.scales.x) {
+                    scales.x = {
+                        ...baseOptions.scales.x,
+                        ticks: {
+                            ...(baseOptions.scales.x.ticks || {}),
+                            color: '#9ca3af'
+                        },
+                        grid: {
+                            ...(baseOptions.scales.x.grid || {}),
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    };
+                }
+                if (baseOptions.scales.y) {
+                    scales.y = {
+                        ...baseOptions.scales.y,
+                        ticks: {
+                            ...(baseOptions.scales.y.ticks || {}),
+                            color: '#9ca3af'
+                        },
+                        grid: {
+                            ...(baseOptions.scales.y.grid || {}),
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    };
+                }
+            }
+
+            return {
+                ...baseOptions,
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    ...basePlugins,
+                    legend: {
+                        ...baseLegend,
+                        labels: {
+                            ...baseLegendLabels,
+                            color: '#ffffff'
+                        }
+                    }
+                },
+                scales
+            };
+        }
+
+        function renderGraphChart(graphId, data, canvas) {
+            if (!canvas) {
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            const options = buildChartOptions(data);
+            const existingChart = charts[graphId];
+
+            if (existingChart && existingChart.config.type === data.type) {
+                existingChart.data.labels = data.labels;
+                existingChart.data.datasets = data.datasets;
+                existingChart.options = options;
+                existingChart.update();
+            } else {
+                if (existingChart) {
+                    existingChart.destroy();
+                }
+                charts[graphId] = new Chart(ctx, {
+                    type: data.type,
+                    data: {
+                        labels: data.labels,
+                        datasets: data.datasets
+                    },
+                    options
+                });
+            }
+        }
+
+        async function refreshGraphs(enabledGraphIds) {
+            const refreshToken = Symbol('graphs-refresh');
+            currentGraphsRefreshToken = refreshToken;
+            const enabledSet = new Set(enabledGraphIds);
+            const container = document.getElementById('graphs-container');
+            const existingIds = new Set(Object.keys(charts));
+
+            if (container) {
+                Array.from(container.querySelectorAll('.graph-container')).forEach(graphEl => {
+                    if (graphEl.id) {
+                        const id = graphEl.id.replace('graph-', '');
+                        existingIds.add(id);
+                    }
+                });
+            }
+
+            existingIds.forEach(id => {
+                if (!enabledSet.has(id)) {
+                    removeGraph(id);
+                }
+            });
+
+            if (enabledGraphIds.length === 0) {
+                return;
+            }
+
+            const tasks = enabledGraphIds.map(async graphId => {
+                if (currentGraphsRefreshToken !== refreshToken) {
+                    return;
+                }
+
+                const graph = availableGraphs.find(g => g.id === graphId);
+                if (!graph) {
+                    return;
+                }
+
+                const { canvas, loadingEl, errorEl } = ensureGraphElements(graph);
+
+                try {
+                    const data = await apiClient.fetchJson(`/dashboard/graphs/${graphId}?limit=10`);
+                    if (currentGraphsRefreshToken !== refreshToken || !enabledSet.has(graphId)) {
+                        return;
+                    }
+                    renderGraphChart(graphId, data, canvas);
+                    if (loadingEl) {
+                        loadingEl.classList.add('hidden');
+                    }
+                    if (errorEl) {
+                        errorEl.classList.add('hidden');
+                        errorEl.textContent = '';
+                    }
+                    if (canvas) {
+                        canvas.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error(`Failed to load graph ${graphId}:`, error);
+                    if (currentGraphsRefreshToken !== refreshToken) {
+                        return;
+                    }
+                    if (loadingEl) {
+                        loadingEl.classList.add('hidden');
+                    }
+                    if (errorEl) {
+                        errorEl.textContent = 'Failed to load graph data';
+                        errorEl.classList.remove('hidden');
+                    }
+                    if (canvas) {
+                        canvas.classList.add('hidden');
+                    }
+                }
+            });
+
+            await Promise.all(tasks);
+        }
+
+        async function loadNamespaces() {
+            try {
+                namespacesData = await apiClient.fetchJson('/dashboard/namespaces/summaries');
+                updateNamespaceTable();
+            } catch (error) {
+                console.error('Failed to load namespaces:', error);
+                document.getElementById('namespace-table-body').innerHTML = 
+                    '<tr><td colspan="6" class="error-text">Failed to load namespaces</td></tr>';
+            }
+        }
+
+        function updateNamespaceTable() {
+            const tbody = document.getElementById('namespace-table-body');
+            
+            if (namespacesData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="loading">No namespaces found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = namespacesData.map(ns => {
+                if (ns.error) {
+                    return `
+                        <tr>
+                            <td>${escapeHtml(ns.namespace)}</td>
+                            <td colspan="4" class="error-text">Error: ${escapeHtml(ns.error)}</td>
+                        </tr>
+                    `;
+                }
+
+                return `
+                    <tr onclick="drillDown('${ns.namespace}')">
+                        <td style="font-weight: 600; color: var(--nvidia-green);">${ns.namespace}</td>
+                        <td>${ns.total_pvcs}</td>
+                        <td class="${ns.unused_pvcs > 0 ? 'error-text' : ''}">${ns.unused_pvcs}</td>
+                        <td>${convertStorage(ns.total_capacity_gi)}</td>
+                        <td class="${ns.unused_capacity_gi > 0 ? 'error-text' : ''}">${convertStorage(ns.unused_capacity_gi)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function toggleLogs() {
+            const panel = document.getElementById('logs-panel');
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden')) {
+                loadLogs();
+            }
+        }
+
+        async function loadLogs() {
+            try {
+                const data = await apiClient.fetchJson('/logs?count=50');
+                const logs = data.logs || [];
+                
+                const container = document.getElementById('logs-container');
+                if (logs.length === 0) {
+                    container.innerHTML = '<div class="text-gray-500 text-center py-4">No logs yet</div>';
+                    return;
+                }
+                
+                container.innerHTML = logs.map(log => {
+                    const time = new Date(log.timestamp).toLocaleTimeString();
+                    const tier = log.tier || 'SYSTEM';
+                    const operation = log.operation || log.message || '';
+                    const statusColor = log.error ? 'text-red-400' : log.status === 200 ? 'text-green-400' : 'text-gray-300';
+                    
+                    return `
+                        <div class="log-entry">
+                            <span class="text-gray-500">${time}</span>
+                            <span class="log-tier log-tier-${tier}">[${tier}]</span>
+                            <span class="${statusColor}">${operation}</span>
+                            ${log.error ? `<span class="text-red-400 ml-2">Error: ${log.error}</span>` : ''}
+                        </div>
+                    `;
+                }).join('');
+                
+                container.scrollTop = container.scrollHeight;
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                document.getElementById('logs-container').innerHTML = 
+                    '<div class="text-center text-red-400 py-4">Failed to load logs</div>';
+            }
+        }
+
+        function drillDown(namespace) {
+            window.location.href = `/?namespace=${namespace}`;
+        }
+
+        // Initialize unit dropdown
+        function initUnitDropdown() {
+            const unitDropdown = document.getElementById('unit-dropdown');
+            dropdownLib.initCustomDropdown(unitDropdown, (value) => {
+                currentUnit = value;
+                updateOverviewDisplay();
+                updateNamespaceTable();
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                if (!e.ctrlKey && !e.metaKey) {
+                    loadDashboard();
+                }
+            } else if (e.key === 'l' || e.key === 'L') {
+                if (!e.ctrlKey && !e.metaKey) {
+                    toggleLogs();
+                }
+            } else if (e.key === 'Escape') {
+                const panel = document.getElementById('logs-panel');
+                if (!panel.classList.contains('hidden')) {
+                    toggleLogs();
+                }
+            }
+        });
+
+        // Initial load
+        initUnitDropdown();
+
+        (async () => {
+            await loadDashboard();
+            // Auto-refresh every 60 seconds
+            setInterval(loadDashboard, 60000);
+        })();
+    </script>
+</body>
+</html>
+
