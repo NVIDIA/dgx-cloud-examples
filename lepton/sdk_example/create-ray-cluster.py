@@ -53,7 +53,7 @@ def set_mount(path,mount_path,storage):
     }
     return Mount(**mount_dict)
 
-def create_ray_job(
+def create_ray_cluster(
     name: str,
     node_group_name: str,
     head_resource_shape: str,
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     client = APIClient()
 
     # Create the Ray cluster
-    create_ray_job(
+    create_ray_cluster(
         name=args.name,
         node_group_name=args.node_group_name,
         head_resource_shape=args.head_resource_shape,
