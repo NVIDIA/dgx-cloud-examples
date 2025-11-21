@@ -17,7 +17,7 @@ limitations under the License.
 
 # Overview
 
-The NVIDIA DGX Cloud Examples repository is generally organized among the following product groups:
+The NVIDIA DGX Cloud Examples repository is a collection of examples and utilities generally organized among the following product groups:
 
 ## Lepton
 
@@ -33,6 +33,12 @@ Learn more about DGX Cloud Lepton here: https://docs.nvidia.com/dgx-cloud/lepton
 The NVIDIA Omniverse platform on DGX Cloud is a powerful combination that brings together advanced 3D collaboration capabilities with scalable AI 
 infrastructure. Omniverse on DGX Cloud represents the next evolution of physical and industrial AI, offering fully managed access to both 
 collaborative 3D workflows and cutting-edge AI services.
+
+## Run:ai
+
+NVIDIA Run:ai accelerates AI operations with dynamic orchestration across the AI lifecycle. It maximizes GPU utilization, scales AI workloads efficiently, 
+and integrates seamlessly into hybrid infrastructure with minimal overhead. Browse the documentation to install and monitor your environment, manage 
+resources and organizations, run and scale AI workloads, and integrate NVIDIA Run:ai into your workflows using APIs.
 
 # Contributing
 
