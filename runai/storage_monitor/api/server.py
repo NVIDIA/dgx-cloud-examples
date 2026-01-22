@@ -95,6 +95,10 @@ if img_dir.exists():
 # Global analyzer instance
 _analyzer: Optional[StorageAnalyzer] = None
 
+# Auth status tracking
+_last_successful_auth: Optional[datetime] = None
+_auth_status: str = "unknown"  # "valid", "expired", "unknown"
+
 
 def get_analyzer() -> StorageAnalyzer:
     """Get or create storage analyzer instance."""
@@ -103,6 +107,16 @@ def get_analyzer() -> StorageAnalyzer:
         k8s_client = K8sClient()
         _analyzer = StorageAnalyzer.from_k8s_client(k8s_client)
     return _analyzer
+
+
+def update_auth_status(success: bool):
+    """Update auth status after K8s API call."""
+    global _last_successful_auth, _auth_status
+    if success:
+        _last_successful_auth = datetime.now()
+        _auth_status = "valid"
+    else:
+        _auth_status = "expired"
 
 
 @app.get("/")
@@ -125,11 +139,13 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint with auth status."""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "service": "runai-storage-monitor"
+        "service": "runai-storage-monitor",
+        "auth_status": _auth_status,
+        "last_successful_auth": _last_successful_auth.isoformat() if _last_successful_auth else None
     }
 
 
@@ -151,6 +167,7 @@ async def list_namespaces():
         analyzer = get_analyzer()
         namespaces = analyzer.list_runai_namespaces()
         
+        update_auth_status(True)
         structured_log.log_api_call('GET', '/namespaces', 'GUI', None, 200, {'count': len(namespaces)})
         
         return {
@@ -158,6 +175,7 @@ async def list_namespaces():
             "count": len(namespaces)
         }
     except Exception as e:
+        update_auth_status(False)
         structured_log.log_api_call('GET', '/namespaces', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to list namespaces")
 
@@ -256,6 +274,7 @@ async def get_full_analysis(namespace: str) -> StorageAnalysis:
         analyzer = get_analyzer()
         analysis = analyzer.analyze_namespace(namespace)
         
+        update_auth_status(True)
         structured_log.log_storage_action(
             'analyze',
             namespace,
@@ -268,6 +287,7 @@ async def get_full_analysis(namespace: str) -> StorageAnalysis:
         
         return analysis
     except Exception as e:
+        update_auth_status(False)
         structured_log.log_api_call('GET', f'/namespaces/{namespace}/analysis', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to analyze namespace")
 
@@ -367,15 +387,43 @@ async def websocket_namespace_updates(websocket: WebSocket, namespace: str):
                 del active_connections[namespace]
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8081):
+_refresh_interval: int = 0  # Global refresh interval setting
+
+
+async def periodic_config_refresh():
+    """Background task to periodically refresh kubeconfig."""
+    global _analyzer
+    while _refresh_interval > 0:
+        await asyncio.sleep(_refresh_interval)
+        if _analyzer is not None:
+            try:
+                _analyzer.pvc_service.k8s._reload_config()
+                update_auth_status(True)
+            except Exception as e:
+                update_auth_status(False)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on server startup."""
+    if _refresh_interval > 0:
+        asyncio.create_task(periodic_config_refresh())
+
+
+def run_server(host: str = "127.0.0.1", port: int = 8081, refresh_interval: int = 0):
     """Run the FastAPI server.
     
     Args:
         host: Host to bind to (use 0.0.0.0 for Docker)
         port: Port to bind to
+        refresh_interval: Kubeconfig refresh interval in seconds (0=disabled)
     """
     import uvicorn
     import os
+    
+    global _refresh_interval
+    _refresh_interval = refresh_interval
+    
     # Use 0.0.0.0 in Docker, 127.0.0.1 for local
     docker_host = "0.0.0.0" if os.path.exists("/.dockerenv") else host
     uvicorn.run(app, host=docker_host, port=port)

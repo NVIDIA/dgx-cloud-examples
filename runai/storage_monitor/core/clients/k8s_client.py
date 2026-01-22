@@ -15,9 +15,13 @@
 
 """Kubernetes API client for storage operations."""
 
-from typing import Optional, List
+import logging
+from typing import Optional, List, Callable, TypeVar
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+
+logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
 
 class K8sClient:
@@ -61,6 +65,42 @@ class K8sClient:
         except Exception as e:
             raise ConnectionError(f"Failed to initialize Kubernetes client: {e}")
     
+    def _reload_config(self):
+        """Reload kubeconfig to refresh tokens.
+        
+        Called when API calls fail with 401 Unauthorized, indicating
+        the token has expired. Re-reads kubeconfig from disk which may
+        have been updated by `runai kubeconfig set`.
+        """
+        logger.info("Reloading kubeconfig to refresh credentials...")
+        self._initialized = False
+        self._core_v1 = None
+        self._storage_v1 = None
+        self._ensure_initialized()
+        logger.info("Kubeconfig reloaded successfully")
+    
+    def _with_retry(self, operation: Callable[[], T]) -> T:
+        """Execute operation with automatic token refresh on 401.
+        
+        Args:
+            operation: Callable that performs a K8s API operation
+            
+        Returns:
+            Result of the operation
+            
+        Raises:
+            ApiException: If operation fails after retry
+            RuntimeError: If operation fails for non-auth reasons
+        """
+        try:
+            return operation()
+        except ApiException as e:
+            if e.status == 401:
+                logger.warning("Received 401 Unauthorized, attempting token refresh...")
+                self._reload_config()
+                return operation()
+            raise
+    
     @property
     def core_v1(self) -> client.CoreV1Api:
         """Get CoreV1Api client."""
@@ -82,11 +122,14 @@ class K8sClient:
         Returns:
             List of namespace dictionaries with name and metadata
         """
-        try:
+        def _do_list():
             if label_selector:
-                namespaces = self.core_v1.list_namespace(label_selector=label_selector)
+                return self.core_v1.list_namespace(label_selector=label_selector)
             else:
-                namespaces = self.core_v1.list_namespace()
+                return self.core_v1.list_namespace()
+        
+        try:
+            namespaces = self._with_retry(_do_list)
             
             return [
                 {
@@ -109,8 +152,11 @@ class K8sClient:
         Returns:
             List of PVC dictionaries with detailed information
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_persistent_volume_claim(namespace)
+        
         try:
-            pvcs = self.core_v1.list_namespaced_persistent_volume_claim(namespace)
+            pvcs = self._with_retry(_do_list)
             
             return [
                 {
@@ -139,8 +185,11 @@ class K8sClient:
         Returns:
             List of pod dictionaries with PVC mount information
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_pod(namespace)
+        
         try:
-            pods = self.core_v1.list_namespaced_pod(namespace)
+            pods = self._with_retry(_do_list)
             
             result = []
             for pod in pods.items:
@@ -170,8 +219,11 @@ class K8sClient:
         Returns:
             List of storage class dictionaries
         """
+        def _do_list():
+            return self.storage_v1.list_storage_class()
+        
         try:
-            storage_classes = self.storage_v1.list_storage_class()
+            storage_classes = self._with_retry(_do_list)
             
             return [
                 {
@@ -196,8 +248,11 @@ class K8sClient:
         Returns:
             List of resource quota dictionaries
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_resource_quota(namespace)
+        
         try:
-            quotas = self.core_v1.list_namespaced_resource_quota(namespace)
+            quotas = self._with_retry(_do_list)
             
             return [
                 {

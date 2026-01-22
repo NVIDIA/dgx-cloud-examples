@@ -114,6 +114,111 @@ kubectl config use-context <your-context>
 runai-storage-server
 ```
 
+## Persistent Deployments (ServiceAccount)
+
+For long-running deployments where you don't want to re-authenticate every 24 hours, use a Kubernetes ServiceAccount instead of OIDC user tokens.
+
+### Why ServiceAccount?
+
+- OIDC tokens expire (15 min access / 24 hr refresh) requiring `runai login` again
+- ServiceAccount tokens are long-lived or auto-refreshed by Kubernetes
+- Ideal for monitoring dashboards, automation, and CI/CD pipelines
+
+### Step 1: Create ServiceAccount and RBAC
+
+Save as `storage-monitor-rbac.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: storage-monitor
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: storage-monitor-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "persistentvolumeclaims", "resourcequotas"]
+    verbs: ["list", "get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["list", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: storage-monitor-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: storage-monitor
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: storage-monitor-reader
+  apiGroup: rbac.authorization.k8s.io
+```
+
+Apply to your cluster:
+
+```bash
+kubectl apply -f storage-monitor-rbac.yaml
+```
+
+### Step 2: Generate Kubeconfig for ServiceAccount
+
+```bash
+# Create a long-lived token (1 year) - requires K8s 1.24+
+kubectl create token storage-monitor -n default --duration=8760h > /tmp/sa-token
+
+# Get cluster connection info from current kubeconfig
+CLUSTER_NAME=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
+CLUSTER_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+CLUSTER_CA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+
+# Generate ServiceAccount kubeconfig
+cat > ~/.kube/storage-monitor-config <<EOF
+apiVersion: v1
+kind: Config
+clusters:
+  - name: ${CLUSTER_NAME}
+    cluster:
+      server: ${CLUSTER_SERVER}
+      certificate-authority-data: ${CLUSTER_CA}
+contexts:
+  - name: storage-monitor
+    context:
+      cluster: ${CLUSTER_NAME}
+      user: storage-monitor
+current-context: storage-monitor
+users:
+  - name: storage-monitor
+    user:
+      token: $(cat /tmp/sa-token)
+EOF
+
+# Clean up temp file
+rm /tmp/sa-token
+```
+
+### Step 3: Run with ServiceAccount Kubeconfig
+
+```bash
+export KUBECONFIG=~/.kube/storage-monitor-config
+runai-storage-server
+```
+
+The dashboard will now run indefinitely without token expiration.
+
+### Security Notes
+
+- The ServiceAccount has **read-only** access (list/get only)
+- Cannot create, modify, or delete any Kubernetes resources
+- Token duration can be adjusted (default example: 1 year)
+- For tighter security, scope to specific namespaces instead of ClusterRole
+
 ## Troubleshooting
 
 ### Authentication Issues
