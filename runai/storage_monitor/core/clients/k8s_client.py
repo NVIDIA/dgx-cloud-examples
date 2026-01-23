@@ -287,35 +287,35 @@ class K8sClient:
             
             # Test namespace listing
             try:
-                self.core_v1.list_namespace(_preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespace(_preload_content=False, limit=1))
                 permissions["can_list_namespaces"] = True
             except ApiException:
                 pass
             
             # Test PVC listing (need a namespace, try default)
             try:
-                self.core_v1.list_namespaced_persistent_volume_claim("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_persistent_volume_claim("default", _preload_content=False, limit=1))
                 permissions["can_list_pvcs"] = True
             except ApiException:
                 pass
             
             # Test Pod listing
             try:
-                self.core_v1.list_namespaced_pod("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_pod("default", _preload_content=False, limit=1))
                 permissions["can_list_pods"] = True
             except ApiException:
                 pass
             
             # Test StorageClass listing
             try:
-                self.storage_v1.list_storage_class(_preload_content=False, limit=1)
+                self._with_retry(lambda: self.storage_v1.list_storage_class(_preload_content=False, limit=1))
                 permissions["can_list_storage_classes"] = True
             except ApiException:
                 pass
             
             # Test ResourceQuota listing
             try:
-                self.core_v1.list_namespaced_resource_quota("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_resource_quota("default", _preload_content=False, limit=1))
                 permissions["can_list_resource_quotas"] = True
             except ApiException:
                 pass
