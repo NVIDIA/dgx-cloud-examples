@@ -31,7 +31,7 @@ with open(readme_file, encoding='utf-8') as f:
 
 setup(
     name="runai-storage-monitor",
-    version="1.0.0",
+    version="1.0.1",
     description="Kubernetes storage visibility tool for Run.ai environments",
     long_description=long_description,
     long_description_content_type="text/markdown",

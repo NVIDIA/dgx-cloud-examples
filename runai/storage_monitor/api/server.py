@@ -57,7 +57,7 @@ structured_log = get_logger()
 app = FastAPI(
     title="Run.ai Storage Monitor API",
     description="Read-only storage visibility for Run.ai namespaces",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 # CORS configuration (localhost only for security)

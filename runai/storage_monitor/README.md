@@ -81,7 +81,7 @@ pip install -e .
 
 ```bash
 runai-storage-monitor --version
-# Should output: runai-storage-monitor, version 1.0.0
+# Should output: runai-storage-monitor, version 1.0.1
 ```
 
 ### Launch GUI
