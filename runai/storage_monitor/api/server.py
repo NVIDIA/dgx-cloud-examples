@@ -398,19 +398,25 @@ _refresh_interval: int = 0  # Global refresh interval setting
 async def periodic_config_refresh():
     """Background task to periodically refresh kubeconfig."""
     global _analyzer
-    while _refresh_interval > 0:
-        await asyncio.sleep(_refresh_interval)
+    # Read interval at start to ensure we have the configured value
+    interval = _refresh_interval
+    logger.info(f"Starting periodic kubeconfig refresh (interval: {interval}s)")
+    
+    while interval > 0:
+        await asyncio.sleep(interval)
         if _analyzer is not None:
             try:
                 _analyzer.pvc_service.k8s._reload_config()
                 update_auth_status(True)
+                logger.debug("Periodic kubeconfig refresh completed successfully")
             except ApiException as e:
                 # Only mark auth as expired for 401 Unauthorized errors
                 if e.status == 401:
                     update_auth_status(False)
-            except Exception:
+                    logger.warning(f"Periodic refresh got 401 - token may be expired: {e}")
+            except Exception as e:
                 # Other errors (network, etc.) don't indicate auth failure
-                pass
+                logger.warning(f"Periodic kubeconfig refresh failed (non-auth error): {e}")
 
 
 @app.on_event("startup")
@@ -418,6 +424,7 @@ async def startup_event():
     """Start background tasks on server startup."""
     if _refresh_interval > 0:
         asyncio.create_task(periodic_config_refresh())
+        logger.info(f"Scheduled periodic kubeconfig refresh task")
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8081, refresh_interval: int = 0):
