@@ -41,6 +41,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
+from kubernetes.client.rest import ApiException
 from ..core.clients.k8s_client import K8sClient
 from ..core.analyzers.storage_analyzer import StorageAnalyzer
 from ..core.models.storage_models import StorageAnalysis, PermissionReport
@@ -175,7 +176,9 @@ async def list_namespaces():
             "count": len(namespaces)
         }
     except Exception as e:
-        update_auth_status(False)
+        # Only mark auth as expired for 401 Unauthorized errors
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         structured_log.log_api_call('GET', '/namespaces', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to list namespaces")
 
@@ -287,7 +290,9 @@ async def get_full_analysis(namespace: str) -> StorageAnalysis:
         
         return analysis
     except Exception as e:
-        update_auth_status(False)
+        # Only mark auth as expired for 401 Unauthorized errors
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         structured_log.log_api_call('GET', f'/namespaces/{namespace}/analysis', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to analyze namespace")
 
@@ -399,8 +404,13 @@ async def periodic_config_refresh():
             try:
                 _analyzer.pvc_service.k8s._reload_config()
                 update_auth_status(True)
-            except Exception as e:
-                update_auth_status(False)
+            except ApiException as e:
+                # Only mark auth as expired for 401 Unauthorized errors
+                if e.status == 401:
+                    update_auth_status(False)
+            except Exception:
+                # Other errors (network, etc.) don't indicate auth failure
+                pass
 
 
 @app.on_event("startup")
