@@ -398,12 +398,12 @@ _refresh_interval: int = 0  # Global refresh interval setting
 async def periodic_config_refresh():
     """Background task to periodically refresh kubeconfig."""
     global _analyzer
-    # Read interval at start to ensure we have the configured value
-    interval = _refresh_interval
-    logger.info(f"Starting periodic kubeconfig refresh (interval: {interval}s)")
-    
-    while interval > 0:
-        await asyncio.sleep(interval)
+    logger.info(f"Starting periodic kubeconfig refresh (interval: {_refresh_interval}s)")
+
+    # Use the global interval each loop so changes (and initialization order)
+    # are reflected correctly.
+    while _refresh_interval > 0:
+        await asyncio.sleep(_refresh_interval)
         if _analyzer is not None:
             try:
                 # Reload kubeconfig from disk (may have been updated by runai kubeconfig set)
@@ -430,7 +430,7 @@ async def startup_event():
     """Start background tasks on server startup."""
     if _refresh_interval > 0:
         asyncio.create_task(periodic_config_refresh())
-        logger.info(f"Scheduled periodic kubeconfig refresh task")
+        logger.info(f"Scheduled periodic kubeconfig refresh task (interval: {_refresh_interval}s)")
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8081, refresh_interval: int = 0):

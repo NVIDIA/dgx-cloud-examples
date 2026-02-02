@@ -140,8 +140,9 @@ class K8sClient:
                 }
                 for ns in namespaces.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list namespaces: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_pvcs(self, namespace: str) -> List[dict]:
         """List all PVCs in a namespace.
@@ -173,8 +174,9 @@ class K8sClient:
                 }
                 for pvc in pvcs.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list PVCs in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_pods(self, namespace: str) -> List[dict]:
         """List all pods in a namespace.
@@ -210,8 +212,9 @@ class K8sClient:
                 })
             
             return result
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list pods in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_storage_classes(self) -> List[dict]:
         """List all storage classes in the cluster.
@@ -236,8 +239,9 @@ class K8sClient:
                 }
                 for sc in storage_classes.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list storage classes: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_resource_quotas(self, namespace: str) -> List[dict]:
         """List resource quotas in a namespace.
@@ -263,8 +267,9 @@ class K8sClient:
                 }
                 for quota in quotas.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list resource quotas in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def check_permissions(self) -> dict:
         """Check what permissions the current user has.
