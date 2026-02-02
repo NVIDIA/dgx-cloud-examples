@@ -406,17 +406,23 @@ async def periodic_config_refresh():
         await asyncio.sleep(interval)
         if _analyzer is not None:
             try:
+                # Reload kubeconfig from disk (may have been updated by runai kubeconfig set)
                 _analyzer.pvc_service.k8s._reload_config()
+                # Verify credentials work by making an actual API call
+                _analyzer.pvc_service.k8s.core_v1.list_namespace(limit=1)
                 update_auth_status(True)
-                logger.debug("Periodic kubeconfig refresh completed successfully")
+                logger.debug("Periodic kubeconfig refresh and verification completed successfully")
             except ApiException as e:
                 # Only mark auth as expired for 401 Unauthorized errors
                 if e.status == 401:
                     update_auth_status(False)
-                    logger.warning(f"Periodic refresh got 401 - token may be expired: {e}")
+                    logger.warning(f"Periodic refresh verification got 401 - token expired: {e}")
+                else:
+                    # Other API errors (403, 500, etc.) don't indicate auth expiration
+                    logger.warning(f"Periodic refresh verification failed (non-401 error): {e}")
             except Exception as e:
                 # Other errors (network, etc.) don't indicate auth failure
-                logger.warning(f"Periodic kubeconfig refresh failed (non-auth error): {e}")
+                logger.warning(f"Periodic kubeconfig refresh failed (non-API error): {e}")
 
 
 @app.on_event("startup")
