@@ -156,8 +156,11 @@ async def get_permissions() -> PermissionReport:
     try:
         analyzer = get_analyzer()
         permissions_dict = analyzer.pvc_service.k8s.check_permissions()
+        update_auth_status(True)
         return PermissionReport(**permissions_dict)
     except Exception as e:
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         raise HTTPException(status_code=500, detail="Failed to check permissions")
 
 
@@ -371,9 +374,12 @@ async def websocket_namespace_updates(websocket: WebSocket, namespace: str):
                     "pvcs": [pvc_wp.model_dump(mode='json') for pvc_wp in analysis.pvcs]
                 }
             except Exception as exc:
+                if isinstance(exc, ApiException) and exc.status == 401:
+                    update_auth_status(False)
                 payload = {
                     "type": "error",
-                    "error": str(exc)
+                    "error": str(exc),
+                    "error_type": "auth" if isinstance(exc, ApiException) and exc.status == 401 else "unknown"
                 }
 
             should_continue = await safe_send(payload)
@@ -408,8 +414,10 @@ async def periodic_config_refresh():
             try:
                 # Reload kubeconfig from disk (may have been updated by runai kubeconfig set)
                 _analyzer.pvc_service.k8s._reload_config()
-                # Verify credentials work by making an actual API call
-                _analyzer.pvc_service.k8s.core_v1.list_namespace(limit=1)
+                # Verify credentials work with retry semantics (1 reload+retry on 401)
+                _analyzer.pvc_service.k8s._with_retry(
+                    lambda: _analyzer.pvc_service.k8s.core_v1.list_namespace(limit=1)
+                )
                 update_auth_status(True)
                 logger.debug("Periodic kubeconfig refresh and verification completed successfully")
             except ApiException as e:
