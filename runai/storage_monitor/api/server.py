@@ -412,9 +412,8 @@ async def periodic_config_refresh():
         await asyncio.sleep(_refresh_interval)
         if _analyzer is not None:
             try:
-                # Reload kubeconfig from disk (may have been updated by runai kubeconfig set)
-                _analyzer.pvc_service.k8s._reload_config()
                 # Verify credentials work with retry semantics (1 reload+retry on 401)
+                # _with_retry handles 401 internally by calling _reload_config then retrying
                 _analyzer.pvc_service.k8s._with_retry(
                     lambda: _analyzer.pvc_service.k8s.core_v1.list_namespace(limit=1)
                 )

@@ -17,59 +17,28 @@ limitations under the License.
 
 # Run.ai Storage Monitor
 
-Kubernetes storage visibility tool for Run.ai environments - web GUI for identifying unused PVCs, tracking storage usage, and getting actionable cleanup recommendations.
+![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Python](https://img.shields.io/badge/python-3.8%2B-green) ![License](https://img.shields.io/badge/license-Apache%202.0-orange)
 
-A community example tool for DGX Cloud Run.ai deployments.
+Kubernetes storage visibility tool for Run.ai environments -- web GUI for identifying unused PVCs, tracking storage quotas, and getting cleanup recommendations.
 
 ## Quick Start
 
 ```bash
-# 1. Authenticate to Run.ai (first time or when token expires)
+# Authenticate and get credentials
 runai login
-
-# 2. Update kubectl credentials
 runai kubeconfig set
 
-# 3. Install tool
+# Install and launch
 pip install -e .
-
-# 4. Launch GUI
 runai-storage-server
-
-# 5. Open browser
-http://127.0.0.1:8081
+# Open http://127.0.0.1:8081
 ```
 
-## Features
-
-- **Web GUI** for storage visibility across Run.ai namespaces
-- List all Run.ai namespaces
-- Analyze PVC usage and status
-- Identify unused PVCs for cleanup
-- Track storage quotas and limits
-- Real-time WebSocket updates
-- Export analysis to JSON/CSV
-- Permission validation
+To use a custom kubeconfig: `export KUBECONFIG=/path/to/config`
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.8+
-- **Run.ai CLI** installed ([Download from Run.ai UI](https://docs.nvidia.com/dgx-cloud/run-ai/latest/advanced.html#downloading-the-nvidia-run-ai-cli))
-- **kubectl** installed
-- **Kubeconfig file** from your cluster administrator
-- Read-only K8s permissions (list namespaces, PVCs, pods)
-
-**First-Time Setup:**
-1. Place kubeconfig in `~/.kube/config` (or set `KUBECONFIG` environment variable)
-2. `runai login` - Opens browser for SSO authentication
-3. `runai kubeconfig set` - Retrieves OIDC token for kubeconfig
-4. `kubectl get nodes` - Verify cluster access works
-
-See full setup guide: [DGX Cloud CLI/API Setup](https://docs.nvidia.com/dgx-cloud/run-ai/latest/advanced.html#setting-up-your-kubernetes-configuration-file)
-
-### Install
+**Prerequisites:** Python 3.8+, [Run.ai CLI](https://docs.nvidia.com/dgx-cloud/run-ai/latest/advanced.html#downloading-the-nvidia-run-ai-cli), kubectl, kubeconfig with read-only K8s access.
 
 ```bash
 git clone <repository-url>
@@ -77,52 +46,11 @@ cd runai_storage_monitor
 pip install -e .
 ```
 
-### Verify Installation
-
-```bash
-runai-storage-monitor --version
-# Should output: runai-storage-monitor, version 1.0.1
-```
-
-### Launch GUI
-
-```bash
-runai-storage-server
-```
-
-Opens at `http://127.0.0.1:8081`
-
-## Configuration
-
-### Custom Kubeconfig
-
-```bash
-runai-storage-server
-# Uses default ~/.kube/config
-```
-
-For custom kubeconfig path, set `KUBECONFIG` environment variable:
-```bash
-export KUBECONFIG=/path/to/config
-runai-storage-server
-```
-
-### Kubernetes Context
-
-```bash
-kubectl config use-context <your-context>
-runai-storage-server
-```
+Verify: `runai-storage-monitor --version`
 
 ## Persistent Deployments (ServiceAccount)
 
-For long-running deployments where you don't want to re-authenticate every 24 hours, use a Kubernetes ServiceAccount instead of OIDC user tokens.
-
-### Why ServiceAccount?
-
-- OIDC tokens expire (15 min access / 24 hr refresh) requiring `runai login` again
-- ServiceAccount tokens are long-lived or auto-refreshed by Kubernetes
-- Ideal for monitoring dashboards, automation, and CI/CD pipelines
+For long-running deployments, use a Kubernetes ServiceAccount instead of OIDC user tokens that expire every 24 hours.
 
 ### Step 1: Create ServiceAccount and RBAC
 
@@ -161,24 +89,43 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-Apply to your cluster:
-
 ```bash
 kubectl apply -f storage-monitor-rbac.yaml
 ```
 
-### Step 2: Generate Kubeconfig for ServiceAccount
+### Step 2: Deploy as a Kubernetes Pod (Recommended)
+
+Deploy as a Pod and Kubernetes handles token rotation automatically -- no static tokens or manual refresh.
 
 ```bash
-# Create a long-lived token (1 year) - requires K8s 1.24+
+# Build image
+cd runai/storage_monitor
+docker build -t storage-monitor:1.0.1 .
+
+# Deploy (push image to your registry first)
+kubectl apply -f deploy/deployment.yaml
+kubectl apply -f deploy/service.yaml
+
+# Access dashboard
+kubectl port-forward svc/storage-monitor 8081:8081
+# Open http://localhost:8081
+```
+
+### Alternative: External Kubeconfig (with Token)
+
+Run outside the cluster using a ServiceAccount token in a kubeconfig.
+
+> **Token duration cap:** Managed platforms (including DGX Cloud) may configure `--service-account-max-token-expiration` on the API server, which silently caps `kubectl create token --duration`. If your token expires in 24 hours despite requesting longer, use the **Pod deployment** above or a **Secret-based token** below.
+
+```bash
+# Create token (actual duration may be capped by API server)
 kubectl create token storage-monitor -n default --duration=8760h > /tmp/sa-token
 
-# Get cluster connection info from current kubeconfig
+# Build kubeconfig
 CLUSTER_NAME=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
 CLUSTER_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
 CLUSTER_CA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 
-# Generate ServiceAccount kubeconfig
 cat > ~/.kube/storage-monitor-config <<EOF
 apiVersion: v1
 kind: Config
@@ -199,55 +146,49 @@ users:
       token: $(cat /tmp/sa-token)
 EOF
 
-# Clean up temp file
 rm /tmp/sa-token
 ```
-
-### Step 3: Run with ServiceAccount Kubeconfig
 
 ```bash
 export KUBECONFIG=~/.kube/storage-monitor-config
 runai-storage-server
 ```
 
-The dashboard will now run indefinitely without token expiration.
+### Alternative: Secret-Based Token (Bypasses Duration Cap)
 
-### Security Notes
+If the API server caps `kubectl create token` duration and you can't deploy as a Pod, create a Secret-based token. This uses the token controller (not the TokenRequest API) and is not subject to `--service-account-max-token-expiration`.
 
-- The ServiceAccount has **read-only** access (list/get only)
-- Cannot create, modify, or delete any Kubernetes resources
-- Token duration can be adjusted (default example: 1 year)
-- For tighter security, scope to specific namespaces instead of ClusterRole
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-monitor-token
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: storage-monitor
+type: kubernetes.io/service-account-token
+```
+
+```bash
+kubectl apply -f storage-monitor-secret.yaml
+
+# Extract token
+TOKEN=$(kubectl get secret storage-monitor-token -n default -o jsonpath='{.data.token}' | base64 -d)
+```
+
+Use this token in the kubeconfig `users[].user.token` field instead of one from `kubectl create token`.
 
 ## Troubleshooting
 
-### Authentication Issues
-- **Token expired:** Run `runai login` then `runai kubeconfig set`
-- **Not authenticated:** Ensure you've completed `runai login` successfully
-- **Wrong cluster context:** Verify with `kubectl config current-context`
+- **Token expires in 24hr despite `--duration=8760h`:** Platform-level `--service-account-max-token-expiration` cap. Use Pod deployment or Secret-based token (see above).
+- **401 Unauthorized after running for a while:** OIDC token expired. Run `runai login` then `runai kubeconfig set`, or switch to ServiceAccount auth.
+- **No namespaces found:** Verify Run.ai namespaces exist (`kubectl get ns | grep runai`) and credentials are current (`runai kubeconfig set`).
+- **Check permissions:** `runai-storage-monitor check-permissions` shows what the current credentials can access.
 
-### "No namespaces found"
-- Check kubeconfig: `kubectl config current-context`
-- Verify Run.ai installation: `kubectl get namespaces | grep runai`
-- Refresh credentials: `runai kubeconfig set`
-
-### "Unable to connect to the server"
-- Ensure kubeconfig is valid: `kubectl cluster-info`
-- Check permissions: `runai-storage-monitor check-permissions`
-- Verify authentication: `runai whoami`
-
-### "WebSocket connection failed"
-- Use HTTP polling as fallback
-- Check firewall/proxy settings
-
-## CLI Usage
-
-For advanced CLI usage and automation:
+## CLI
 
 ```bash
 runai-storage-monitor --help
-
-# Common commands:
 runai-storage-monitor list-namespaces
 runai-storage-monitor analyze <namespace>
 runai-storage-monitor unused <namespace>
@@ -255,4 +196,4 @@ runai-storage-monitor unused <namespace>
 
 ## Support
 
-This is a community example tool. For issues or questions, please file an issue in the [dgx-cloud-examples repository](https://github.com/NVIDIA/dgx-cloud-examples/issues).
+Community example tool. File issues at [dgx-cloud-examples](https://github.com/NVIDIA/dgx-cloud-examples/issues).

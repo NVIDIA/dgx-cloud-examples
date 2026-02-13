@@ -72,6 +72,8 @@ class K8sClient:
         the token has expired. Re-reads kubeconfig from disk which may
         have been updated by `runai kubeconfig set`.
         """
+        if not self._initialized:
+            return
         logger.info("Reloading kubeconfig to refresh credentials...")
         self._initialized = False
         self._core_v1 = None
