@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Storage Monitor - Kubernetes Deployment
+#
+# Prerequisites:
+#   1. ServiceAccount and RBAC applied (see ../README.md "Step 1: Create ServiceAccount and RBAC")
+#   2. Container image built and available:
+#      docker build -t storage-monitor:1.0.1 ..
+#
+# Usage:
+#   kubectl apply -f deployment.yaml
+#   kubectl apply -f service.yaml
+#   kubectl port-forward svc/storage-monitor 8081:8081
+#
+# The Pod uses in-cluster ServiceAccount authentication.
+# The kubelet automatically rotates the projected SA token.
+# The Python kubernetes client re-reads the token every 60 seconds.
+# No static tokens or manual token refresh required.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-monitor
+  labels:
+    app: storage-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-monitor
+  template:
+    metadata:
+      labels:
+        app: storage-monitor
+    spec:
+      serviceAccountName: storage-monitor
+      containers:
+        - name: storage-monitor
+          # Replace with your registry, e.g.: myregistry.io/storage-monitor:1.0.1
+          image: storage-monitor:1.0.1
+          ports:
+            - containerPort: 8081
+              name: http
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true

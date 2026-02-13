@@ -29,7 +29,7 @@ from .core.services.dashboard_aggregator import DashboardAggregator
 
 
 @click.group()
-@click.version_option(version="1.0.0")
+@click.version_option(version="1.0.1")
 def cli():
     """Run.ai Storage Monitor - Kubernetes storage visibility tool.
     
@@ -248,14 +248,18 @@ def daemon():
 @daemon.command()
 @click.option("--port", default=8081, help="Port for API server")
 @click.option("--host", default="127.0.0.1", help="Host for API server")
-def start(port: int, host: str):
+@click.option("--refresh-interval", default=0, type=int, 
+              help="Kubeconfig refresh interval in seconds (0=disabled, recommended: 600 for 10 min)")
+def start(port: int, host: str, refresh_interval: int):
     """Start API daemon."""
     click.echo(f"Starting API daemon on {host}:{port}...")
+    if refresh_interval > 0:
+        click.echo(f"Kubeconfig refresh interval: {refresh_interval}s")
     click.echo("Use 'runai-storage daemon stop' to stop the daemon")
     
     # Import here to avoid loading FastAPI dependencies unless needed
     from .api.server import run_server
-    run_server(host=host, port=port)
+    run_server(host=host, port=port, refresh_interval=refresh_interval)
 
 
 @daemon.command()

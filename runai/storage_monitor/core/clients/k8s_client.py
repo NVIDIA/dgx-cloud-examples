@@ -15,9 +15,13 @@
 
 """Kubernetes API client for storage operations."""
 
-from typing import Optional, List
+import logging
+from typing import Optional, List, Callable, TypeVar
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+
+logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
 
 class K8sClient:
@@ -61,6 +65,44 @@ class K8sClient:
         except Exception as e:
             raise ConnectionError(f"Failed to initialize Kubernetes client: {e}")
     
+    def _reload_config(self):
+        """Reload kubeconfig to refresh tokens.
+        
+        Called when API calls fail with 401 Unauthorized, indicating
+        the token has expired. Re-reads kubeconfig from disk which may
+        have been updated by `runai kubeconfig set`.
+        """
+        if not self._initialized:
+            return
+        logger.info("Reloading kubeconfig to refresh credentials...")
+        self._initialized = False
+        self._core_v1 = None
+        self._storage_v1 = None
+        self._ensure_initialized()
+        logger.info("Kubeconfig reloaded successfully")
+    
+    def _with_retry(self, operation: Callable[[], T]) -> T:
+        """Execute operation with automatic token refresh on 401.
+        
+        Args:
+            operation: Callable that performs a K8s API operation
+            
+        Returns:
+            Result of the operation
+            
+        Raises:
+            ApiException: If operation fails after retry
+            RuntimeError: If operation fails for non-auth reasons
+        """
+        try:
+            return operation()
+        except ApiException as e:
+            if e.status == 401:
+                logger.warning("Received 401 Unauthorized, attempting token refresh...")
+                self._reload_config()
+                return operation()
+            raise
+    
     @property
     def core_v1(self) -> client.CoreV1Api:
         """Get CoreV1Api client."""
@@ -82,11 +124,14 @@ class K8sClient:
         Returns:
             List of namespace dictionaries with name and metadata
         """
-        try:
+        def _do_list():
             if label_selector:
-                namespaces = self.core_v1.list_namespace(label_selector=label_selector)
+                return self.core_v1.list_namespace(label_selector=label_selector)
             else:
-                namespaces = self.core_v1.list_namespace()
+                return self.core_v1.list_namespace()
+        
+        try:
+            namespaces = self._with_retry(_do_list)
             
             return [
                 {
@@ -97,8 +142,9 @@ class K8sClient:
                 }
                 for ns in namespaces.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list namespaces: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_pvcs(self, namespace: str) -> List[dict]:
         """List all PVCs in a namespace.
@@ -109,8 +155,11 @@ class K8sClient:
         Returns:
             List of PVC dictionaries with detailed information
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_persistent_volume_claim(namespace)
+        
         try:
-            pvcs = self.core_v1.list_namespaced_persistent_volume_claim(namespace)
+            pvcs = self._with_retry(_do_list)
             
             return [
                 {
@@ -127,8 +176,9 @@ class K8sClient:
                 }
                 for pvc in pvcs.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list PVCs in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_pods(self, namespace: str) -> List[dict]:
         """List all pods in a namespace.
@@ -139,8 +189,11 @@ class K8sClient:
         Returns:
             List of pod dictionaries with PVC mount information
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_pod(namespace)
+        
         try:
-            pods = self.core_v1.list_namespaced_pod(namespace)
+            pods = self._with_retry(_do_list)
             
             result = []
             for pod in pods.items:
@@ -161,8 +214,9 @@ class K8sClient:
                 })
             
             return result
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list pods in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_storage_classes(self) -> List[dict]:
         """List all storage classes in the cluster.
@@ -170,8 +224,11 @@ class K8sClient:
         Returns:
             List of storage class dictionaries
         """
+        def _do_list():
+            return self.storage_v1.list_storage_class()
+        
         try:
-            storage_classes = self.storage_v1.list_storage_class()
+            storage_classes = self._with_retry(_do_list)
             
             return [
                 {
@@ -184,8 +241,9 @@ class K8sClient:
                 }
                 for sc in storage_classes.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list storage classes: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def list_resource_quotas(self, namespace: str) -> List[dict]:
         """List resource quotas in a namespace.
@@ -196,8 +254,11 @@ class K8sClient:
         Returns:
             List of resource quota dictionaries
         """
+        def _do_list():
+            return self.core_v1.list_namespaced_resource_quota(namespace)
+        
         try:
-            quotas = self.core_v1.list_namespaced_resource_quota(namespace)
+            quotas = self._with_retry(_do_list)
             
             return [
                 {
@@ -208,8 +269,9 @@ class K8sClient:
                 }
                 for quota in quotas.items
             ]
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list resource quotas in namespace {namespace}: {e}")
+        except ApiException:
+            # Preserve status code for upstream handlers (e.g., auth 401 detection).
+            raise
     
     def check_permissions(self) -> dict:
         """Check what permissions the current user has.
@@ -232,35 +294,35 @@ class K8sClient:
             
             # Test namespace listing
             try:
-                self.core_v1.list_namespace(_preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespace(_preload_content=False, limit=1))
                 permissions["can_list_namespaces"] = True
             except ApiException:
                 pass
             
             # Test PVC listing (need a namespace, try default)
             try:
-                self.core_v1.list_namespaced_persistent_volume_claim("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_persistent_volume_claim("default", _preload_content=False, limit=1))
                 permissions["can_list_pvcs"] = True
             except ApiException:
                 pass
             
             # Test Pod listing
             try:
-                self.core_v1.list_namespaced_pod("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_pod("default", _preload_content=False, limit=1))
                 permissions["can_list_pods"] = True
             except ApiException:
                 pass
             
             # Test StorageClass listing
             try:
-                self.storage_v1.list_storage_class(_preload_content=False, limit=1)
+                self._with_retry(lambda: self.storage_v1.list_storage_class(_preload_content=False, limit=1))
                 permissions["can_list_storage_classes"] = True
             except ApiException:
                 pass
             
             # Test ResourceQuota listing
             try:
-                self.core_v1.list_namespaced_resource_quota("default", _preload_content=False, limit=1)
+                self._with_retry(lambda: self.core_v1.list_namespaced_resource_quota("default", _preload_content=False, limit=1))
                 permissions["can_list_resource_quotas"] = True
             except ApiException:
                 pass

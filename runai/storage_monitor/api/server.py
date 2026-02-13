@@ -41,6 +41,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
+from kubernetes.client.rest import ApiException
 from ..core.clients.k8s_client import K8sClient
 from ..core.analyzers.storage_analyzer import StorageAnalyzer
 from ..core.models.storage_models import StorageAnalysis, PermissionReport
@@ -56,7 +57,7 @@ structured_log = get_logger()
 app = FastAPI(
     title="Run.ai Storage Monitor API",
     description="Read-only storage visibility for Run.ai namespaces",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 # CORS configuration (localhost only for security)
@@ -95,6 +96,10 @@ if img_dir.exists():
 # Global analyzer instance
 _analyzer: Optional[StorageAnalyzer] = None
 
+# Auth status tracking
+_last_successful_auth: Optional[datetime] = None
+_auth_status: str = "unknown"  # "valid", "expired", "unknown"
+
 
 def get_analyzer() -> StorageAnalyzer:
     """Get or create storage analyzer instance."""
@@ -103,6 +108,16 @@ def get_analyzer() -> StorageAnalyzer:
         k8s_client = K8sClient()
         _analyzer = StorageAnalyzer.from_k8s_client(k8s_client)
     return _analyzer
+
+
+def update_auth_status(success: bool):
+    """Update auth status after K8s API call."""
+    global _last_successful_auth, _auth_status
+    if success:
+        _last_successful_auth = datetime.now()
+        _auth_status = "valid"
+    else:
+        _auth_status = "expired"
 
 
 @app.get("/")
@@ -125,11 +140,13 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint with auth status."""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "service": "runai-storage-monitor"
+        "service": "runai-storage-monitor",
+        "auth_status": _auth_status,
+        "last_successful_auth": _last_successful_auth.isoformat() if _last_successful_auth else None
     }
 
 
@@ -139,8 +156,11 @@ async def get_permissions() -> PermissionReport:
     try:
         analyzer = get_analyzer()
         permissions_dict = analyzer.pvc_service.k8s.check_permissions()
+        update_auth_status(True)
         return PermissionReport(**permissions_dict)
     except Exception as e:
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         raise HTTPException(status_code=500, detail="Failed to check permissions")
 
 
@@ -151,6 +171,7 @@ async def list_namespaces():
         analyzer = get_analyzer()
         namespaces = analyzer.list_runai_namespaces()
         
+        update_auth_status(True)
         structured_log.log_api_call('GET', '/namespaces', 'GUI', None, 200, {'count': len(namespaces)})
         
         return {
@@ -158,6 +179,9 @@ async def list_namespaces():
             "count": len(namespaces)
         }
     except Exception as e:
+        # Only mark auth as expired for 401 Unauthorized errors
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         structured_log.log_api_call('GET', '/namespaces', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to list namespaces")
 
@@ -256,6 +280,7 @@ async def get_full_analysis(namespace: str) -> StorageAnalysis:
         analyzer = get_analyzer()
         analysis = analyzer.analyze_namespace(namespace)
         
+        update_auth_status(True)
         structured_log.log_storage_action(
             'analyze',
             namespace,
@@ -268,6 +293,9 @@ async def get_full_analysis(namespace: str) -> StorageAnalysis:
         
         return analysis
     except Exception as e:
+        # Only mark auth as expired for 401 Unauthorized errors
+        if isinstance(e, ApiException) and e.status == 401:
+            update_auth_status(False)
         structured_log.log_api_call('GET', f'/namespaces/{namespace}/analysis', 'GUI', None, 500, None, str(e))
         raise HTTPException(status_code=500, detail="Failed to analyze namespace")
 
@@ -346,9 +374,12 @@ async def websocket_namespace_updates(websocket: WebSocket, namespace: str):
                     "pvcs": [pvc_wp.model_dump(mode='json') for pvc_wp in analysis.pvcs]
                 }
             except Exception as exc:
+                if isinstance(exc, ApiException) and exc.status == 401:
+                    update_auth_status(False)
                 payload = {
                     "type": "error",
-                    "error": str(exc)
+                    "error": str(exc),
+                    "error_type": "auth" if isinstance(exc, ApiException) and exc.status == 401 else "unknown"
                 }
 
             should_continue = await safe_send(payload)
@@ -367,15 +398,62 @@ async def websocket_namespace_updates(websocket: WebSocket, namespace: str):
                 del active_connections[namespace]
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8081):
+_refresh_interval: int = 0  # Global refresh interval setting
+
+
+async def periodic_config_refresh():
+    """Background task to periodically refresh kubeconfig."""
+    global _analyzer
+    logger.info(f"Starting periodic kubeconfig refresh (interval: {_refresh_interval}s)")
+
+    # Use the global interval each loop so changes (and initialization order)
+    # are reflected correctly.
+    while _refresh_interval > 0:
+        await asyncio.sleep(_refresh_interval)
+        if _analyzer is not None:
+            try:
+                # Verify credentials work with retry semantics (1 reload+retry on 401)
+                # _with_retry handles 401 internally by calling _reload_config then retrying
+                _analyzer.pvc_service.k8s._with_retry(
+                    lambda: _analyzer.pvc_service.k8s.core_v1.list_namespace(limit=1)
+                )
+                update_auth_status(True)
+                logger.debug("Periodic kubeconfig refresh and verification completed successfully")
+            except ApiException as e:
+                # Only mark auth as expired for 401 Unauthorized errors
+                if e.status == 401:
+                    update_auth_status(False)
+                    logger.warning(f"Periodic refresh verification got 401 - token expired: {e}")
+                else:
+                    # Other API errors (403, 500, etc.) don't indicate auth expiration
+                    logger.warning(f"Periodic refresh verification failed (non-401 error): {e}")
+            except Exception as e:
+                # Other errors (network, etc.) don't indicate auth failure
+                logger.warning(f"Periodic kubeconfig refresh failed (non-API error): {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on server startup."""
+    if _refresh_interval > 0:
+        asyncio.create_task(periodic_config_refresh())
+        logger.info(f"Scheduled periodic kubeconfig refresh task (interval: {_refresh_interval}s)")
+
+
+def run_server(host: str = "127.0.0.1", port: int = 8081, refresh_interval: int = 0):
     """Run the FastAPI server.
     
     Args:
         host: Host to bind to (use 0.0.0.0 for Docker)
         port: Port to bind to
+        refresh_interval: Kubeconfig refresh interval in seconds (0=disabled)
     """
     import uvicorn
     import os
+    
+    global _refresh_interval
+    _refresh_interval = refresh_interval
+    
     # Use 0.0.0.0 in Docker, 127.0.0.1 for local
     docker_host = "0.0.0.0" if os.path.exists("/.dockerenv") else host
     uvicorn.run(app, host=docker_host, port=port)
