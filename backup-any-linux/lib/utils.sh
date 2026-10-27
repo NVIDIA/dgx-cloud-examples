@@ -125,7 +125,7 @@ get_file_mtime() {
     
     # Try Python fallback (if available)
     if command -v python3 >/dev/null 2>&1; then
-        if python3 -c "import os; print(int(os.path.getmtime('$file_path')))" 2>/dev/null; then
+        if python3 -c "import os,sys; print(int(os.path.getmtime(sys.argv[1])))" "$file_path" 2>/dev/null; then
             return 0
         fi
     fi
@@ -577,10 +577,10 @@ parse_iso8601_date() {
     # Try Python fallback
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
-import datetime
-dt = datetime.datetime.fromisoformat('${date_string}'.replace('Z', '+00:00'))
+import datetime, sys
+dt = datetime.datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00'))
 print(int(dt.timestamp()))
-" 2>/dev/null && return 0
+" "$date_string" 2>/dev/null && return 0
     fi
     
     log ERROR "Unable to parse date: $date_string"

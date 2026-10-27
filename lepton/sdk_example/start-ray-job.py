@@ -16,6 +16,7 @@
 from leptonai.api.v2.client import APIClient
 from ray.job_submission import JobSubmissionClient
 import argparse
+import os
 
 def run_ray_job(cluster_name: str, job_name: str, command: str, client: APIClient):
     ray_url= f"{client.url}/rayclusters/{cluster_name}/dashboard"
@@ -25,7 +26,8 @@ def run_ray_job(cluster_name: str, job_name: str, command: str, client: APIClien
             "Authorization": f"Bearer {client.token()}",
             "origin": client.get_dashboard_base_url()
         },
-        verify=False
+        # Set RAY_CA_BUNDLE to a CA bundle path if the dashboard uses a private CA.
+        verify=os.environ.get("RAY_CA_BUNDLE", True)
     )
     job_id = job_submission_client.submit_job(submission_id=job_name, entrypoint=command)
     return job_id

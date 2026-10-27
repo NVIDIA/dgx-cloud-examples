@@ -564,8 +564,11 @@ s3_upload_parallel() {
         # Fallback: use xargs (portable but less features)
         log DEBUG "Using xargs for parallel uploads"
         
-        cat "$file_list" | xargs -P "$max_workers" -I {} bash -c \
-            "$aws_cmd cp '{}' '$s3_base\$(basename {})' 2>&1 | tee -a '${LOG_FILE:-/dev/null}'" \
+        # File names are passed as positional args (NUL-delimited), never
+        # interpolated into the shell command string.
+        tr '\n' '\0' < "$file_list" | xargs -0 -n 1 -P "$max_workers" bash -c \
+            '$1 cp "$4" "$2$(basename "$4")" 2>&1 | tee -a "$3"' \
+            _ "$aws_cmd" "$s3_base" "${LOG_FILE:-/dev/null}" \
             || failed=1
     fi
     
