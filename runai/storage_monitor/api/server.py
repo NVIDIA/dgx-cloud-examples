@@ -378,7 +378,7 @@ async def websocket_namespace_updates(websocket: WebSocket, namespace: str):
                     update_auth_status(False)
                 payload = {
                     "type": "error",
-                    "error": str(exc),
+                    "error": "Failed to analyze namespace",
                     "error_type": "auth" if isinstance(exc, ApiException) and exc.status == 401 else "unknown"
                 }
 
